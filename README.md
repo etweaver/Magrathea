@@ -6,10 +6,15 @@ PREREQUISITS
 ------------
 
 C++ compiler with support for C++17 features
+
 CFITSIO:heasarc.gsfc.nasa.gov/fitsio/
+
 FFTW(>3.3):www.fftw.org
+
 Threadpool:github.com/progschj/ThreadPool/
+
 VCL:github.com/vectorclass
+
 
 INSTALLATION
 ------------
