@@ -131,6 +131,10 @@ if [ ! -d ./build/ ]; then
     mkdir build;
 fi
 
+if [ ! -d ./lib/ ]; then
+    mkdir lib;
+fi
+
 echo "Generating makefile..."
 echo "
 CC=$CC
@@ -147,17 +151,17 @@ INCFLAGS+= ${CFITSIO_CFLAGS} ${FFTW_CFLAGS} ${VCL_CFLAGS}
 
 echo '
 .PHONY: all clean
-all : libmagrathea$(DYN_SUFFIX)
+all : lib/libmagrathea$(DYN_SUFFIX)
 
 clean : 
 	rm -rf build/disk.o
 	rm -rf build/geometry.o
 	rm -rf build/image.o
 	rm -rf build/diskPhysics.o
-	rm -rf libmagrathea$(DYN_SUFFIX)
+	rm -rf lib/libmagrathea$(DYN_SUFFIX)
 	
-libmagrathea$(DYN_SUFFIX) : build/magrathea.o build/geometry.o build/diskPhysics.o
-	$(CXX) -v $(LDFLAGS) $(INCFLAGS) -fPIC $(DYN_OPT) -o libmagrathea$(DYN_SUFFIX) $^
+lib/libmagrathea$(DYN_SUFFIX) : build/magrathea.o build/geometry.o build/diskPhysics.o
+	$(CXX) $(LDFLAGS) $(INCFLAGS) -fPIC $(DYN_OPT) -o lib/libmagrathea$(DYN_SUFFIX) $^
 	
 build/magrathea.o : src/magrathea.cpp include/magrathea/magrathea.h include/magrathea/grid.h include/magrathea/diskPhysics.h
 	$(CXX) $(CXXFLAGS) $(INCFLAGS) src/magrathea.cpp -c -o build/magrathea.o
@@ -169,5 +173,6 @@ build/diskPhysics.o : src/diskPhysics.cpp include/magrathea/diskPhysics.h
 	$(CXX) $(CXXFLAGS) $(INCFLAGS) src/diskPhysics.cpp -c -o build/diskPhysics.o
 	
 install :
-	cp $(DYN_SUFFIX) $(PREFIX)/include/
+	cp lib/libmagrathea$(DYN_SUFFIX) $(PREFIX)lib/
+	cp -r include/magrathea $(PREFIX)include/
 ' >> ./Makefile
