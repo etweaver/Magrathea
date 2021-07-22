@@ -77,8 +77,8 @@ public:
 	//new version that can be offset. Removing the galario padding.
 	//casa expects that the pixel position and value correspond to the pixel corner
 	//I hate this, but have to reimplement it here for compatibility.
-	template<class density>
-	void propagate(const grid<density>& g, typename grid<density>::prop_type type, const vect& offset, ThreadPool& pool, bool avx){
+	template<class density, class temperature>
+	void propagate(const grid<density, temperature>& g, typename grid<density,temperature>::prop_type type, const vect& offset, ThreadPool& pool, bool avx){
 		//we need to repackage the frequencies into groups of four for the avx version
 		unsigned int nfreqsAVX=frequencies.size()/4;
 		unsigned int extra=frequencies.size()%4;
@@ -106,7 +106,7 @@ public:
 			std::cout << "position and target vectors must not be the same." << std:: endl;
 			exit(1);
 		}
-		//g.propagateRayAVX(line(target,normal),frequencies,position,type); //just to print diagnostic info.
+		//g.propagateRay(line(target,normal),frequencies,position,type); //just to print diagnostic info.
 		
 		const double radDist= position.r(); //radial distance of the image center from disk center
 		const double theta= position.theta(); //angle between image center and disk verticle (z axis)
@@ -1221,8 +1221,8 @@ struct radialImage{
 	radialImage(double rmin, double rmax, unsigned int npoints):rmin(rmin),rmax(rmax),npoints(npoints),data(){}
 	radialImage(const radialImage& other):rmin(other.rmin),rmax(other.rmax),npoints(other.npoints),data(other.data){}
 	
-	template<class density>
-	void propagate(const grid<density>& g, typename grid<density>::prop_type type){
+	template<class density, class temperature>
+	void propagate(const grid<density,temperature>& g, typename grid<density,temperature>::prop_type type){
 		data.clear();
 		std::vector<double> frequencies; //for now, this will just be moonochromatic
 		frequencies.push_back(230.358e9);

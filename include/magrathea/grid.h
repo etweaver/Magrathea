@@ -25,9 +25,13 @@
 #include "vcl/vectormath_trig.h"
 #include "aligned_alloc.h"
 
-template<class density>
-class grid{
-public:
+//the interpSurface is an r/theta/phi grid used for temperatures or desnities
+//that come in a table format
+//The main use is temperatures that come from RADMC output
+//Currently, I've written this to assume axial symmetry, so the setup and interp2d
+//functions don't consider phi
+//For a very complicated 3d surface, this can be expanded
+class interpSurface {
 	struct interpCell{
 		double r;
 		double theta;
@@ -37,137 +41,181 @@ public:
 		interpCell(const interpCell& other): r(other.r), theta(other.theta), phi(other.phi), value(other.value)	{	}
 	};
 	
-	struct interpSurface {
-		std::vector<interpCell> data;
-		std::vector<double> rCenters,tCenters;
-		void initCenterLists(){
-			for(size_t i=0; i<nr; i++)
-				rCenters.push_back(data[i].r);
-			for(size_t i=0; i<data.size(); i+=nr)
-				tCenters.push_back(data[i].theta);
+	std::vector<interpCell> data;
+	std::vector<double> rCenters,tCenters;
+	void initCenterLists(){
+		for(size_t i=0; i<nr; i++)
+			rCenters.push_back(data[i].r);
+		for(size_t i=0; i<data.size(); i+=nr)
+			tCenters.push_back(data[i].theta);
+	}
+	double rmin, rmax, tmin, tmax, pmin, pmax;
+	int ndim;
+	int nr; //used for 2d interpolation. Stride length.
+	interpSurface():data(std::vector<interpCell>()), rmin(0), rmax(0), tmin(0), tmax(0), pmin(0), pmax(0), ndim(0), nr(0)	{
+		initCenterLists();
+	}
+	interpSurface(std::vector<interpCell> data, double rmin, double rmax, double tmin, double tmax, double pmin, double pmax , int ndim, int nr):
+	data(data), rmin(rmin), rmax(rmax), tmin(tmin), tmax(tmax), pmin(pmin), pmax(pmax), ndim(ndim), nr(nr)	{
+		initCenterLists();
+	}
+	interpSurface(const interpSurface& other):
+	data(other.data), rmin(other.rmin), rmax(other.rmax), tmin(other.tmin), tmax(other.tmax), pmin(other.pmin), pmax(other.pmax), ndim(other.ndim), nr(other.nr)	{
+		rCenters.clear();
+		tCenters.clear();
+		initCenterLists();
+	}
+	
+	interpSurface& operator= (const interpSurface& other){
+		data=other.data;
+		rmin=other.rmin; rmax=other.rmax;
+		tmin=other.tmin; tmax=other.tmax;
+		pmin=other.pmin; pmax=other.pmax;
+		ndim=other.ndim; nr=other.nr;
+		rCenters.clear();
+		tCenters.clear();
+		initCenterLists();
+		return *this;
+	}
+	
+	//special constructor for reading in 2d radmc output files.
+	interpSurface(std::istream& gridFile, std::istream& dataFile){
+		unsigned int nr, ntheta, nphi;
+		std::string line;
+		//std::ifstream infile(gridFile.c_str());
+		std::stringstream stream;
+		int linenum=0;
+	
+		for (linenum=0; linenum<5; linenum++) {
+			getline(gridFile, line);
 		}
-		double rmin, rmax, tmin, tmax, pmin, pmax;
-		int ndim;
-		int nr; //used for 2d interpolation. Stride length.
-		interpSurface():data(std::vector<interpCell>()), rmin(0), rmax(0), tmin(0), tmax(0), pmin(0), pmax(0), ndim(0), nr(0)	{
-			initCenterLists();
-		}
-		interpSurface(std::vector<interpCell> data, double rmin, double rmax, double tmin, double tmax, double pmin, double pmax , int ndim, int nr):
-		data(data), rmin(rmin), rmax(rmax), tmin(tmin), tmax(tmax), pmin(pmin), pmax(pmax), ndim(ndim), nr(nr)	{
-			initCenterLists();
-		}
-		interpSurface(const interpSurface& other):
-		data(other.data), rmin(other.rmin), rmax(other.rmax), tmin(other.tmin), tmax(other.tmax), pmin(other.pmin), pmax(other.pmax), ndim(other.ndim), nr(other.nr)	{
-			rCenters.clear();
-			tCenters.clear();
-			initCenterLists();
-		}
-		
-		interpSurface& operator= (const interpSurface& other){
-			data=other.data;
-			rmin=other.rmin; rmax=other.rmax;
-			tmin=other.tmin; tmax=other.tmax;
-			pmin=other.pmin; pmax=other.pmax;
-			ndim=other.ndim; nr=other.nr;
-			rCenters.clear();
-			tCenters.clear();
-			initCenterLists();
-			return *this;
-		}
-		
-		double interp2d(double r, double theta) const{
-		//note that theta is measured from the pole, not the midplane
-			if(data.size()==0)
-				return 0;
-			if(theta>pi/2){
-				theta = pi - theta;	//the file only goes to pi/2 because it is midplane symmetric
+	
+		getline(gridFile, line);
+		stream << line;
+		stream >> nr >> ntheta >> nphi;
+		//std::cout << nr << "\t" << ntheta << "\t" << nphi << std::endl;
+		std::vector<double> thetaAndr(nr+ntheta+nphi+3);
+		double dummy;
+		for(int i=0;i<nr+ntheta+nphi+3;i++){
+			getline(gridFile, line);
+			//std::cout << line << std::endl;
+			thetaAndr[i] = strtod(line.c_str(), NULL);
+			//std::cout << thetaAndr[i] << std::endl;
+		}	
+		rmin=thetaAndr[0];
+		rmax=thetaAndr[nr];
+		tmin=thetaAndr[nr+1];
+		tmax=thetaAndr[nr+ntheta+1];
+		pmin=thetaAndr[nr+ntheta+2];
+		pmax=thetaAndr[nr+ntheta+nphi+2];
+		//std::cout << rmin << "\t" << rmax << std::endl;
+		//std::cout << tmin << "\t" << tmax << std::endl;
+		//std::cout << pmin << "\t" << pmax << std::endl;
+	
+		double rLowerEdge, rUpperEdge, tLowerEdge, tUpperEdge;
+		double rCenter, tCenter;
+			
+		tLowerEdge=thetaAndr[nr+1];
+		for(int i=1;i<=ntheta;i++){
+			tUpperEdge=thetaAndr[nr+1+i];
+			tCenter=(tLowerEdge+tUpperEdge)/2;
+			rLowerEdge=thetaAndr[0];
+			for(int j=1;j<=nr;j++){
+				rUpperEdge=thetaAndr[j];
+				rCenter=(rLowerEdge+rUpperEdge)/2;
+				data.push_back(interpCell(rCenter,tCenter,0,0));
+				rLowerEdge=rUpperEdge;
 			}
-			double rmin, rmax, tmin, tmax;
-			//double tol=1e-6;
-			rmin=data.front().r;
-			tmin=data.front().theta;
-			rmax=data.back().r;
-			tmax=data.back().theta;
-			/*if(r<surf.rmin-tol || r>surf.rmax+tol || theta<surf.tmin-tol || theta>surf.tmin*2+tol){
-				std::cout << "Error: point (" << r << "," << theta << ") not inside region" << std::endl;
-				std::cout << "rmin: " << surf.rmin << ", rmax: " << surf.rmax << ", tmin: " << surf.tmin << ", tmax " << surf.tmin*2 << std::endl;
-				//std::cout << "(" << x << "," << y << "," << z << ")" << std::endl;
-				exit(1);
-			}*/
-			//the points are ordered by theta then by r.
-			//we need the nearest 4 points
-			int indexT=0; int indexR=0;
-			indexT=(std::lower_bound(tCenters.begin(),tCenters.end(),theta)-tCenters.begin())*nr;
-			indexR=std::lower_bound(rCenters.begin(),rCenters.end(),r)-rCenters.begin();
-			//because of the way we assign values to the centers of bins, our interpolation
-			//surface is actually smaller than the grid, so we need a limited ability to 
-			//extrapolate, provided the region is still inside the grid.
-			if(indexT==0)
-				indexT+=nr;
-			if(indexT>=data.size())
-				indexT-=nr;
-			if(indexR==0)
-				indexR++;
-			if(indexR==nr)
-				indexR--;
-			//std::cout << indexT << '\t' << indexR << std::endl;
-			//std::cout << indexR << "\t" << indexT << std::endl;
-			double r0,r1,t0,t1;
-			interpCell c1=data[indexT-nr+indexR-1];
-			interpCell c2=data[indexT-nr+indexR];
-			interpCell c3=data[indexT+indexR-1];
-			interpCell c4=data[indexT+indexR];
-			//std::cout << c1.value << "\t" << c2.value << "\t" << c3.value << "\t" << c4.value << std::endl;
-		
-			r0=c1.r;
-			r1=c2.r;
-			t0=c1.theta;
-			t1=c3.theta;
-			//std::cout << r0 << '\t' << r1 << '\t' << t0 << '\t' << t1 << std::endl;
-			double n1= (r1-r)*(theta-t0)/((r1-r0)*(t1-t0));
-			double n2= (r-r0)*(theta-t0)/((r1-r0)*(t1-t0));
-			double n3= (r1-r)*(t1-theta)/((r1-r0)*(t1-t0));
-			double n4= (r-r0)*(t1-theta)/((r1-r0)*(t1-t0));
-			return c3.value*n1+c4.value*n2+c1.value*n3+c2.value*n4;	
+			tLowerEdge=tUpperEdge;
 		}
-	};
-	//the temp struct is an interface between the stepper and the different ways the
-	//user can choose to supply a temperature.
-	struct temp{
-		bool useParametric;
-		interpSurface surf;
-		paramTemp ptemp;
-		temp():useParametric(true), ptemp(25,115*AU,0,0) {	}
-		temp(bool useParametric, interpSurface& surf):useParametric(useParametric), surf(surf),ptemp(60,60,100*AU,100*AU){
-			std::cout << (useParametric ? "Parametric temperature" : "Real Temperature") << std::endl;
-			//We don't set up the interpolation surface here, because we need
-			//information from the main constructors or input file
-		}
-		double operator()(double r, double theta, double phi) const{
-			if(useParametric){
-				double t=ptemp(r,theta,phi);
-				if(t<2.73)	
-					t=2.73;
-				return t;
-			}else{
-				double t=surf.interp2d(r,theta);
-				if(t<2.73)	//the interpolation can occasionally give weird results at the very edge of the surface. 
-					t=2.73;	//if it gets too small at an edge, just set it to a low value
-				return t;
+
+		//getline(infile, line);
+		//getline(infile, line);
+		//unsigned int numcells = strtod(line.c_str(), NULL);
+		//std::cout << data.size() << std::endl;
+		//assert(numcells == data.size());
+		//getline(infile, line);
+		double temp;
+		for(int i=0; i<data.size();i++){
+			std::stringstream newstream;
+			getline(dataFile, line);
+			if(line != ""){
+				newstream << line;
+				newstream >> dummy >> dummy >> dummy >> temp;
+				data[i].value=temp;
+			} else {
+				i--;
 			}
 		}
-	};
+		initCenterLists();
+	}
+	
+	double interp2d(double r, double theta) const{
+	//note that theta is measured from the pole, not the midplane
+		if(data.size()==0)
+			return 0;
+		if(theta>pi/2){
+			theta = pi - theta;	//the file only goes to pi/2 because it is midplane symmetric
+		}
+		double rmin, rmax, tmin, tmax;
+		//double tol=1e-6;
+		rmin=data.front().r;
+		tmin=data.front().theta;
+		rmax=data.back().r;
+		tmax=data.back().theta;
+		/*if(r<surf.rmin-tol || r>surf.rmax+tol || theta<surf.tmin-tol || theta>surf.tmin*2+tol){
+			std::cout << "Error: point (" << r << "," << theta << ") not inside region" << std::endl;
+			std::cout << "rmin: " << surf.rmin << ", rmax: " << surf.rmax << ", tmin: " << surf.tmin << ", tmax " << surf.tmin*2 << std::endl;
+			//std::cout << "(" << x << "," << y << "," << z << ")" << std::endl;
+			exit(1);
+		}*/
+		//the points are ordered by theta then by r.
+		//we need the nearest 4 points
+		int indexT=0; int indexR=0;
+		indexT=(std::lower_bound(tCenters.begin(),tCenters.end(),theta)-tCenters.begin())*nr;
+		indexR=std::lower_bound(rCenters.begin(),rCenters.end(),r)-rCenters.begin();
+		//because of the way we assign values to the centers of bins, our interpolation
+		//surface is actually smaller than the grid, so we need a limited ability to 
+		//extrapolate, provided the region is still inside the grid.
+		if(indexT==0)
+			indexT+=nr;
+		if(indexT>=data.size())
+			indexT-=nr;
+		if(indexR==0)
+			indexR++;
+		if(indexR==nr)
+			indexR--;
+		//std::cout << indexT << '\t' << indexR << std::endl;
+		//std::cout << indexR << "\t" << indexT << std::endl;
+		double r0,r1,t0,t1;
+		interpCell c1=data[indexT-nr+indexR-1];
+		interpCell c2=data[indexT-nr+indexR];
+		interpCell c3=data[indexT+indexR-1];
+		interpCell c4=data[indexT+indexR];
+		//std::cout << c1.value << "\t" << c2.value << "\t" << c3.value << "\t" << c4.value << std::endl;
+	
+		r0=c1.r;
+		r1=c2.r;
+		t0=c1.theta;
+		t1=c3.theta;
+		//std::cout << r0 << '\t' << r1 << '\t' << t0 << '\t' << t1 << std::endl;
+		double n1= (r1-r)*(theta-t0)/((r1-r0)*(t1-t0));
+		double n2= (r-r0)*(theta-t0)/((r1-r0)*(t1-t0));
+		double n3= (r1-r)*(t1-theta)/((r1-r0)*(t1-t0));
+		double n4= (r-r0)*(t1-theta)/((r1-r0)*(t1-t0));
+		return c3.value*n1+c4.value*n2+c1.value*n3+c2.value*n4;	
+	}
+};
+
+template<class density, class temperature>
+class grid{
+public:
 	double rmin, rmax, tmin, tmax, pmin, pmax;	//starting/ending values for each dimension
 	double starMass;
-	bool readDensityFromFile, readTempFromFile;
-	std::string binFile;	//radmc output describing bin edges
-	std::string temperatureFile;	//radmc output describing temperature for a grid defined by binFile
-	std::string densityFile;	//radmc output describing densities for a grid defined by binfile
 	std::string opacityFile;	//file describing dust opacity
 	density dens;
 	density dustDens;//used when the dust and gas structures don't match
-	interpSurface surf;//temperature interpolation surface
-	temp temperature;
+	temperature diskTemp;
 	dustOpacity dust_opac;
 	bool freezeout;
 	double turbulence;
@@ -177,57 +225,31 @@ public:
 	//empty
 	grid(){
 		rmin=0; rmax=0; tmin=0; tmax=0; pmin=0; pmax=0;
-		readDensityFromFile=false;
-		readTempFromFile=false;
 		freezeout=false;
 		turbulence=0;
 	}
 	
 	//standard
 	grid(double rmin,double rmax,double tmin,double tmax,double pmin, double pmax,
-		 double starMass, bool readDensityFromFile, bool readTempFromFile, std::string binFile, std::string temperatureFile, 
-		 std::string densityFile, std::string opacityFile, density dens, bool freezeout, double turb):
+		 double starMass, std::string opacityFile, density dens, temperature diskTemp, bool freezeout, double turb):
 	rmin(rmin), rmax(rmax), tmin(tmin), tmax(tmax), pmin(pmin),pmax(pmax),
-	starMass(starMass), readDensityFromFile(readDensityFromFile), readTempFromFile(readTempFromFile), 
-	binFile(binFile), temperatureFile(temperatureFile), densityFile(densityFile), opacityFile(opacityFile), dens(dens), dustDens(dens), dust_opac(opacityFile),
-	freezeout(freezeout), turbulence(turb){
-		std::ifstream gridFile(binFile);
-		std::ifstream tempFile(temperatureFile);
-		surf=makeInterpSurf(gridFile, tempFile);
-		temperature=temp(!readTempFromFile, surf);
-	}
+	starMass(starMass), opacityFile(opacityFile), dens(dens), dustDens(dens), diskTemp(diskTemp), 
+	dust_opac(opacityFile), freezeout(freezeout), turbulence(turb){	}
 
-	//standard constructor, but with istreams for the gridfile and temperature file
-	grid(double rmin,double rmax,double tmin,double tmax,double pmin, double pmax,
-		double starMass, bool readDensityFromFile, bool readTempFromFile, std::istream& binFile, std::istream& temperatureFile,
-		std::string densityFile, std::string opacityFile, density dens, bool freezeout, double turb):
-		rmin(rmin), rmax(rmax), tmin(tmin), tmax(tmax), pmin(pmin),pmax(pmax),
-		starMass(starMass), readDensityFromFile(false), readTempFromFile(readTempFromFile),
-		densityFile(densityFile), opacityFile(opacityFile), dens(dens), dustDens(dens), dust_opac(opacityFile),
-		freezeout(freezeout), turbulence(turb){
-			surf=makeInterpSurf(binFile, temperatureFile);
-			temperature=temp(!readTempFromFile, surf);
-		}
 		
 	//copy
 	//Currently real broken
 	grid(const grid& other):rmin(other.rmin), rmax(other.rmax),tmin(other.tmin),tmax(other.tmax),pmin(other.pmin),pmax(other.pmax), 
-	readDensityFromFile(other.readDensityFromFile), readTempFromFile(other.readTempFromFile), binFile(other.binFile),
-	temperatureFile(other.temperatureFile), densityFile(other.densityFile), opacityFile(other.opacityFile), dens(other.dens), dustDens(other.dustDens),
-	dust_opac(other.opacityFile), freezeout(other.freezeout), turbulence(other.turbulence){	
-		if(temperatureFile != ""){
-			surf=makeInterpSurf(binFile, densityFile);
-		}
-	}
+	opacityFile(other.opacityFile), dens(other.dens), dustDens(other.dustDens),
+	dust_opac(other.opacityFile), freezeout(other.freezeout), turbulence(other.turbulence){	}
 	
 	//assignment
 	grid& operator= (const grid& other){
 		if(this!=&other){
 			rmin=other.rmin; rmax=other.rmax; tmin=other.tmin;
 			tmax=other.tmax; pmin=other.pmin; pmax=other.pmax;
-			readDensityFromFile=other.readDensityFromFile; readTempFromFile=other.readTempFromFile;
-			binFile=other.binFile; temperatureFile=other.temperatureFile; densityFile=other.densityFile;
-			opacityFile=other.opacityFile, dens=other.dense, dustDens=other.dustDens, freezeout=other.freezeout, turbulence=other.turbulence;
+			opacityFile=other.opacityFile, dens=other.dense, dustDens=other.dustDens, 
+			diskTemp=other.diskTemp, freezeout=other.freezeout, turbulence=other.turbulence;
 		}
 		return *this;
 	}
@@ -368,83 +390,6 @@ public:
 		return(diskPairs);
 	}
 	
-	interpSurface makeInterpSurf(std::istream& gridFile, std::istream& temperatureFile){
-		unsigned int nr, ntheta, nphi;
-		std::string line;
-		//std::ifstream infile(gridFile.c_str());
-		std::stringstream stream;
-		int linenum=0;
-		
-		for (linenum=0; linenum<5; linenum++) {
-			getline(gridFile, line);
-		}
-		
-		getline(gridFile, line);
-		stream << line;
-		stream >> nr >> ntheta >> nphi;
-		//std::cout << nr << "\t" << ntheta << "\t" << nphi << std::endl;
-		std::vector<double> thetaAndr(nr+ntheta+nphi+3);
-		double dummy;
-		for(int i=0;i<nr+ntheta+nphi+3;i++){
-			getline(gridFile, line);
-			//std::cout << line << std::endl;
-			thetaAndr[i] = strtod(line.c_str(), NULL);
-			//std::cout << thetaAndr[i] << std::endl;
-		}
-		std::vector<grid::interpCell> data;
-		
-		double rmin, rmax, tmin, tmax, pmin, pmax;
-		rmin=thetaAndr[0];
-		rmax=thetaAndr[nr];
-		tmin=thetaAndr[nr+1];
-		tmax=thetaAndr[nr+ntheta+1];
-		pmin=thetaAndr[nr+ntheta+2];
-		pmax=thetaAndr[nr+ntheta+nphi+2];
-		//std::cout << rmin << "\t" << rmax << std::endl;
-		//std::cout << tmin << "\t" << tmax << std::endl;
-		//std::cout << pmin << "\t" << pmax << std::endl;
-		
-		double rLowerEdge, rUpperEdge, tLowerEdge, tUpperEdge;
-		double rCenter, tCenter;
-				
-		tLowerEdge=thetaAndr[nr+1];
-		for(int i=1;i<=ntheta;i++){
-			tUpperEdge=thetaAndr[nr+1+i];
-			tCenter=(tLowerEdge+tUpperEdge)/2;
-			rLowerEdge=thetaAndr[0];
-			for(int j=1;j<=nr;j++){
-				rUpperEdge=thetaAndr[j];
-				rCenter=(rLowerEdge+rUpperEdge)/2;
-				data.push_back(interpCell(rCenter,tCenter,0,0));
-				rLowerEdge=rUpperEdge;
-			}
-			tLowerEdge=tUpperEdge;
-		}
-
-		//getline(infile, line);
-		//getline(infile, line);
-		//unsigned int numcells = strtod(line.c_str(), NULL);
-		//std::cout << data.size() << std::endl;
-		//assert(numcells == data.size());
-		//getline(infile, line);
-		double temp;
-		for(int i=0; i<data.size();i++){
-			std::stringstream newstream;
-			getline(temperatureFile, line);
-			if(line != ""){
-				newstream << line;
-				newstream >> dummy >> dummy >> dummy >> temp;
-				data[i].value=temp;
-			} else {
-				i--;
-			}
-		}
-		
-		interpSurface surf(data,rmin,rmax,tmin,tmax,pmin,pmax,2, nr);
-		std::cout << "done with makeInterpSurf" << std::endl;
-		return surf;
-	}
-	
 	//std::vector<std::vector<widthInfo> > propagateRay(const line l, const std::vector<double> frequencies, const vect cameraPosition, prop_type type) const{
 	std::vector<double> propagateRay(const line l, const std::vector<double> frequencies, const vect cameraPosition, prop_type type) const{
 		std::vector<std::pair<intersection,intersection> > diskPairs=entriesAndExits(l);
@@ -497,7 +442,7 @@ public:
 				double colNumDens=dens.colDensAbove(pos.r(),pos.theta(),pos.phi())/amu/2.0;
 				if(colNumDens <= 1e21)
 					d=0;
-				double temp=temperature(pos.r(),pos.theta(),pos.phi()); //starting temp
+				double temp=diskTemp(pos.r(),pos.theta(),pos.phi()); //starting temp
 				temperatures.push_back(temp);
 		
 				double r_cyl=pos.r()*sin(pos.theta());	//cylindrical radius
@@ -554,7 +499,7 @@ public:
 				while (remainingDist >= stepsize/2) {
 					double d=dens(pos.r(),pos.theta(),pos.phi());	//gas density
 					double ddust=dustDens(pos.r(),pos.theta(),pos.phi())*dustToGasRatio;	//seperate dust density
-					double temp=temperature(pos.r(),pos.theta(),pos.phi());	//starting temp
+					double temp=diskTemp(pos.r(),pos.theta(),pos.phi());	//starting temp
 					double r_cyl=pos.r()*sin(pos.theta());	//cylindrical radius
 					double azdif=(cameraPosition.phi()-pos.phi());//difference between the camera orientation and the point in question
 					double velocity=sqrt(gravConst*starMass/r_cyl/r_cyl/r_cyl)*r_cyl*sin(cameraPosition.theta())*cos(-pi/2+azdif);//velocity with respect to LOS
@@ -658,7 +603,7 @@ public:
 				}
 				d*=factor;
 				
-				double temp=temperature(pos.r(),pos.theta(),pos.phi()); //starting temp
+				double temp=diskTemp(pos.r(),pos.theta(),pos.phi()); //starting temp
 				temperatures.push_back(temp);
 		
 				double r_cyl=pos.r()*sin(pos.theta());	//cylindrical radius
@@ -920,7 +865,7 @@ public:
 			while (remainingDist >= stepsize/2) {
 				double d=dens(pos.r(),pos.theta(),pos.phi());	//gas density
 				double ddust=dustDens(pos.r(),pos.theta(),pos.phi())*dustToGasRatio;	//seperate dust density
-				double temp=temperature(pos.r(),pos.theta(),pos.phi());	//starting temp
+				double temp=diskTemp(pos.r(),pos.theta(),pos.phi());	//starting temp
 				temperatures.push_back(temp);
 		
 				double r_cyl=pos.r()*sin(pos.theta());	//cylindrical radius
@@ -1055,7 +1000,7 @@ public:
 		double opticalDepth=0;
 		std::vector<double> temperatures; //temps at each step through the disk
 		double valueSlow=0;
-		unsigned int nsteps=500;
+		unsigned int nsteps=100;
 		
 		std::vector<std::vector<double> > results;
 		
@@ -1071,7 +1016,7 @@ public:
 				std::vector<double> stats; //z position, temperature, density, intensity etc for this ray
 				double d=dens(pos.r(),pos.theta(),pos.phi());	//gas density
 				double ddust=dustDens(pos.r(),pos.theta(),pos.phi())*dustToGasRatio;	//seperate dust density
-				double temp=temperature(pos.r(),pos.theta(),pos.phi());	//starting temp
+				double temp=diskTemp(pos.r(),pos.theta(),pos.phi());	//starting temp
 				temperatures.push_back(temp);
 		
 				double r_cyl=pos.r()*sin(pos.theta());	//cylindrical radius
