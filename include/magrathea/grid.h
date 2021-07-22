@@ -229,14 +229,21 @@ public:
 		turbulence=0;
 	}
 	
-	//standard
-	grid(double rmin,double rmax,double tmin,double tmax,double pmin, double pmax,
-		 double starMass, std::string opacityFile, density dens, temperature diskTemp, bool freezeout, double turb):
-	rmin(rmin), rmax(rmax), tmin(tmin), tmax(tmax), pmin(pmin),pmax(pmax),
-	starMass(starMass), opacityFile(opacityFile), dens(dens), dustDens(dens), diskTemp(diskTemp), 
-	dust_opac(opacityFile), freezeout(freezeout), turbulence(turb){	}
+	//standard, including a dust and gas structure
+	grid(double rmin,double rmax,double tmin,double tmax, double starMass, std::string opacityFile, 
+		density dens, density dustDens, temperature diskTemp, bool freezeout, double turb):
+		rmin(rmin), rmax(rmax), tmin(tmin), tmax(tmax), pmin(0),pmax(2*pi),
+		starMass(starMass), opacityFile(opacityFile), dens(dens), dustDens(dustDens), diskTemp(diskTemp), 
+		dust_opac(opacityFile), freezeout(freezeout), turbulence(turb){	}
+	
+	//simple continuum-only constructor
+	grid(double rmin, double rmax, double tmin, double tmax, double starMass, std::string opacityFile, 
+		density dustDens, temperature diskTemp):
+		rmin(rmin), rmax(rmax), tmin(tmin), tmax(tmax), pmin(0),pmax(2*pi),
+		starMass(starMass), opacityFile(opacityFile), dens(), dustDens(dustDens), diskTemp(diskTemp), 
+		dust_opac(opacityFile), freezeout(false), turbulence(0){	}
 
-		
+
 	//copy
 	//Currently real broken
 	grid(const grid& other):rmin(other.rmin), rmax(other.rmax),tmin(other.tmin),tmax(other.tmax),pmin(other.pmin),pmax(other.pmax), 
