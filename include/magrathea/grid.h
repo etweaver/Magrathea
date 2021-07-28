@@ -407,7 +407,7 @@ public:
 	}
 	
 	//std::vector<std::vector<widthInfo> > propagateRay(const line l, const std::vector<double> frequencies, const vect cameraPosition, prop_type type) const{
-	std::vector<double> propagateRay(const line l, const std::vector<double> frequencies, const vect cameraPosition, prop_type type) const{
+	std::vector<double> propagateRay(const line l, const std::vector<double> frequencies, const vect cameraPosition, prop_type type, unsigned int nsteps) const{
 		std::vector<std::pair<intersection,intersection> > diskPairs=entriesAndExits(l);
 
 		vect dir=l.direction/-l.direction.mag(); //ensure unit vector
@@ -418,11 +418,9 @@ public:
 		std::vector<double> value (frequencies.size(),0);	//final results will go here
 		std::vector<double> opticalDepth (frequencies.size(),0); //for diagnostics
 		std::vector<double> temperatures; //temps at each step through the disk
-		unsigned int nsteps=100;
 	
 		for(auto pair : diskPairs){
 			int stepcount=0;
-			double dustToGasRatio = 1e-2;
 			vect pos=pair.first.location; //starting point
 			double remainingDist=(pair.second.location-pair.first.location).mag(); //the total distance along which to integrate
 			double stepsize = remainingDist/nsteps;	//currently nonadaptive stepsize
@@ -452,7 +450,7 @@ public:
 				//densities of gas and dust.
 				//For CO, which we're using here, we add a factor to account for photodissociation 
 				double d=dens(pos.r(),pos.theta(),pos.phi());	//gas density
-				double ddust=dustDens(pos.r(),pos.theta(),pos.phi())*dustToGasRatio;	//seperate dust density
+				double ddust=dustDens(pos.r(),pos.theta(),pos.phi());	//seperate dust density
 				//right now, we just turn off the CO if the column (number) density of H2 
 				//is less than 10^21. This is from C. Qi et al 2011, and Rosenfeld 2013
 				double colNumDens=dens.colDensAbove(pos.r(),pos.theta(),pos.phi())/amu/2.0;
@@ -506,7 +504,6 @@ public:
 			std::vector<double> valueSpecial(frequencies.size(),0);	//final results will go here
 			for(auto pair : diskPairs){
 				int stepcount=0;
-				double dustToGasRatio = 1e-2;
 				vect pos=pair.first.location; //starting point
 				double remainingDist=(pair.second.location-pair.first.location).mag(); //the total distance along which to integrate
 				double stepsize = remainingDist/nsteps;	//currently nonadaptive stepsize
@@ -514,7 +511,7 @@ public:
 				pos+=dir*stepsize/2;
 				while (remainingDist >= stepsize/2) {
 					double d=dens(pos.r(),pos.theta(),pos.phi());	//gas density
-					double ddust=dustDens(pos.r(),pos.theta(),pos.phi())*dustToGasRatio;	//seperate dust density
+					double ddust=dustDens(pos.r(),pos.theta(),pos.phi());	//seperate dust density
 					double temp=diskTemp(pos.r(),pos.theta(),pos.phi());	//starting temp
 					double r_cyl=pos.r()*sin(pos.theta());	//cylindrical radius
 					double azdif=(cameraPosition.phi()-pos.phi());//difference between the camera orientation and the point in question
@@ -556,7 +553,7 @@ public:
 	//same as the basic progagateRay, but with frequencies packed into sets of 4, so we can do AVX operations
 	//for this, I'm taking out the special versions of prop_type, since I probably will never need to do
 	//the incorrect continuum subtraction again.
-	std::vector<double> propagateRayAVX(const line l, const std::vector<Vec4d,aligned_allocator<Vec4d> > freqsAVX, const vect cameraPosition, prop_type type) const{
+	std::vector<double> propagateRayAVX(const line l, const std::vector<Vec4d,aligned_allocator<Vec4d> > freqsAVX, const vect cameraPosition, prop_type type, unsigned int nsteps) const{
 		if(type==attenuated_continuum || type==subtracted_bad || type==subtracted_real){
 			std::cout << "Error: AVX ray tracing does not support propagation of type " << type << std::endl;
 			exit(1);
@@ -571,11 +568,9 @@ public:
 		std::vector<Vec4d,aligned_allocator<Vec4d> > value (freqsAVX.size(),0,aligned_allocator<Vec4d>(5));	//final results will go here
 		std::vector<Vec4d,aligned_allocator<Vec4d> > opticalDepth (freqsAVX.size(),0,aligned_allocator<Vec4d>(5)); //for diagnostics
 		std::vector<double> temperatures; //temps at each step through the disk
-		unsigned int nsteps=80;
 		
 		for(auto pair : diskPairs){
 			int stepcount=0;
-			double dustToGasRatio = 1e-2;
 			vect pos=pair.first.location; //starting point
 			double remainingDist=(pair.second.location-pair.first.location).mag(); //the total distance along which to integrate
 			double stepsize = remainingDist/nsteps;	//currently nonadaptive stepsize
@@ -604,7 +599,7 @@ public:
 				//std::cout << stepcount << "\t" << pos.z/AU << "\t" << numScaleHeights << "\t" << numScaleHeightsNext << std::endl;
 				
 				double d=dens(pos.r(),pos.theta(),pos.phi());	//gas density
-				double ddust=dustDens(pos.r(),pos.theta(),pos.phi())*dustToGasRatio;	//seperate dust density
+				double ddust=dustDens(pos.r(),pos.theta(),pos.phi());	//seperate dust density
 				//right now, we just turn off the CO if the column (number) density of H2 
 				//is less than ~10^21. This is from C. Qi et al 2011, and Rosenfeld 2013
 				double colNumDens=dens.colDensAbove(pos.r(),pos.theta(),pos.phi())/amu/2.0;

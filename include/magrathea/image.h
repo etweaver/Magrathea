@@ -78,7 +78,7 @@ public:
 	//casa expects that the pixel position and value correspond to the pixel corner
 	//I hate this, but have to reimplement it here for compatibility.
 	template<class density, class temperature>
-	void propagate(const grid<density, temperature>& g, typename grid<density,temperature>::prop_type type, const vect& offset, ThreadPool& pool, bool avx){
+	void propagate(const grid<density, temperature>& g, typename grid<density,temperature>::prop_type type, const vect& offset, ThreadPool& pool, bool avx, unsigned int nsteps){
 		//we need to repackage the frequencies into groups of four for the avx version
 		unsigned int nfreqsAVX=frequencies.size()/4;
 		unsigned int extra=frequencies.size()%4;
@@ -157,9 +157,9 @@ public:
 					
 					std::vector<double> pix;
 					if(avx){
-						pix=g.propagateRayAVX(l,freqsAVX,position,type);
+						pix=g.propagateRayAVX(l,freqsAVX,position,type, nsteps);
 					}else{
-						pix=g.propagateRay(l,frequencies,position,type);
+						pix=g.propagateRay(l,frequencies,position,type, nsteps);
 					}
 					values.push_back(pix);//list of values at each freqency for a row
 					bool all0=true;
