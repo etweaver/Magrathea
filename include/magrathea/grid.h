@@ -32,6 +32,7 @@
 //functions don't consider phi
 //For a very complicated 3d surface, this can be expanded
 class interpSurface {
+private:
 	struct interpCell{
 		double r;
 		double theta;
@@ -44,14 +45,18 @@ class interpSurface {
 	std::vector<interpCell> data;
 	std::vector<double> rCenters,tCenters;
 	void initCenterLists(){
-		for(size_t i=0; i<nr; i++)
+		for(size_t i=0; i<nr; i++){
 			rCenters.push_back(data[i].r);
-		for(size_t i=0; i<data.size(); i+=nr)
+		}
+		for(size_t i=0; i<data.size(); i+=nr){
 			tCenters.push_back(data[i].theta);
+		}
 	}
 	double rmin, rmax, tmin, tmax, pmin, pmax;
 	int ndim;
 	int nr; //used for 2d interpolation. Stride length.
+	
+public:
 	interpSurface():data(std::vector<interpCell>()), rmin(0), rmax(0), tmin(0), tmax(0), pmin(0), pmax(0), ndim(0), nr(0)	{
 		initCenterLists();
 	}
@@ -80,7 +85,7 @@ class interpSurface {
 	
 	//special constructor for reading in 2d radmc output files.
 	interpSurface(std::istream& gridFile, std::istream& dataFile){
-		unsigned int nr, ntheta, nphi;
+		unsigned int rtotal, ttotal, ptotal;
 		std::string line;
 		//std::ifstream infile(gridFile.c_str());
 		std::stringstream stream;
@@ -92,22 +97,23 @@ class interpSurface {
 	
 		getline(gridFile, line);
 		stream << line;
-		stream >> nr >> ntheta >> nphi;
-		//std::cout << nr << "\t" << ntheta << "\t" << nphi << std::endl;
-		std::vector<double> thetaAndr(nr+ntheta+nphi+3);
+		stream >> rtotal >> ttotal >> ptotal;
+		nr=rtotal; ndim=2;
+		//std::cout << rtotal << "\t" << ttotal << "\t" << ptotal << std::endl;
+		std::vector<double> thetaAndr(rtotal+ttotal+ptotal+3);
 		double dummy;
-		for(int i=0;i<nr+ntheta+nphi+3;i++){
+		for(int i=0;i<rtotal+ttotal+ptotal+3;i++){
 			getline(gridFile, line);
 			//std::cout << line << std::endl;
 			thetaAndr[i] = strtod(line.c_str(), NULL);
 			//std::cout << thetaAndr[i] << std::endl;
 		}	
 		rmin=thetaAndr[0];
-		rmax=thetaAndr[nr];
-		tmin=thetaAndr[nr+1];
-		tmax=thetaAndr[nr+ntheta+1];
-		pmin=thetaAndr[nr+ntheta+2];
-		pmax=thetaAndr[nr+ntheta+nphi+2];
+		rmax=thetaAndr[rtotal];
+		tmin=thetaAndr[rtotal+1];
+		tmax=thetaAndr[rtotal+ttotal+1];
+		pmin=thetaAndr[rtotal+ttotal+2];
+		pmax=thetaAndr[rtotal+ttotal+ptotal+2];
 		//std::cout << rmin << "\t" << rmax << std::endl;
 		//std::cout << tmin << "\t" << tmax << std::endl;
 		//std::cout << pmin << "\t" << pmax << std::endl;
@@ -115,12 +121,12 @@ class interpSurface {
 		double rLowerEdge, rUpperEdge, tLowerEdge, tUpperEdge;
 		double rCenter, tCenter;
 			
-		tLowerEdge=thetaAndr[nr+1];
-		for(int i=1;i<=ntheta;i++){
-			tUpperEdge=thetaAndr[nr+1+i];
+		tLowerEdge=thetaAndr[rtotal+1];
+		for(int i=1;i<=ttotal;i++){
+			tUpperEdge=thetaAndr[rtotal+1+i];
 			tCenter=(tLowerEdge+tUpperEdge)/2;
 			rLowerEdge=thetaAndr[0];
-			for(int j=1;j<=nr;j++){
+			for(int j=1;j<=rtotal;j++){
 				rUpperEdge=thetaAndr[j];
 				rCenter=(rLowerEdge+rUpperEdge)/2;
 				data.push_back(interpCell(rCenter,tCenter,0,0));
@@ -141,11 +147,14 @@ class interpSurface {
 			getline(dataFile, line);
 			if(line != ""){
 				newstream << line;
+				//std::cout << line << std::endl;
 				newstream >> dummy >> dummy >> dummy >> temp;
 				data[i].value=temp;
+				//std::cout << temp << std::endl;
 			} else {
 				i--;
 			}
+			//std::cout << i << " ";
 		}
 		initCenterLists();
 	}
