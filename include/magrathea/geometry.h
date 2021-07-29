@@ -66,7 +66,7 @@ public:
 		return acos(z/(this->r()));
 	}
 	double phi() const{
-		double pi=4*atan(1);
+		static const double pi=4*atan(1);
 		double p=atan2(y,x);
 		if(p<0) p+=2*pi;
 		if(p>2*pi) p-=2*pi;
