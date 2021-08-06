@@ -451,11 +451,22 @@ public:
 				//For CO, which we're using here, we add a factor to account for photodissociation 
 				double d=dens(pos.r(),pos.theta(),pos.phi());	//gas density
 				double ddust=dustDens(pos.r(),pos.theta(),pos.phi());	//seperate dust density
-				//right now, we just turn off the CO if the column (number) density of H2 
-				//is less than 10^21. This is from C. Qi et al 2011, and Rosenfeld 2013
-				double colNumDens=dens.colDensAbove(pos.r(),pos.theta(),pos.phi())/amu/2.0;
-				if(colNumDens <= 1e21)
-					d=0;
+				//Previously, I just turned off the CO if the column (number) density of H2 
+				//was less than 10^21. This is from C. Qi et al 2011, and Rosenfeld 2013
+				//Now, it gets smoothly decreased over an order of magnitude around 10^21
+				if(type!=continuum){
+					double colNumDens=dens.colDensAbove(pos.r(),pos.theta(),pos.phi())/amu/2.0;
+					//I'm further complicating this by smoothly phasing out the CO
+					double factor;
+					if(colNumDens <= 5e20){
+						factor=0;
+					}else if(colNumDens <= 1.5e21){
+						factor=(colNumDens-5e20)/(1e21);
+					}else{
+						factor=1;
+					}
+					d*=factor;
+				}
 				double temp=diskTemp(pos.r(),pos.theta(),pos.phi()); //starting temp
 				temperatures.push_back(temp);
 		
@@ -600,19 +611,22 @@ public:
 				
 				double d=dens(pos.r(),pos.theta(),pos.phi());	//gas density
 				double ddust=dustDens(pos.r(),pos.theta(),pos.phi());	//seperate dust density
-				//right now, we just turn off the CO if the column (number) density of H2 
-				//is less than ~10^21. This is from C. Qi et al 2011, and Rosenfeld 2013
-				double colNumDens=dens.colDensAbove(pos.r(),pos.theta(),pos.phi())/amu/2.0;
-				//I'm further complicating this by smoothly phasing out the CO
-				double factor;
-				if(colNumDens <= 5e20){
-					factor=0;
-				}else if(colNumDens <= 1.5e21){
-					factor=(colNumDens-5e20)/(1e21);
-				}else{
-					factor=1;
+				//Previously, I just turned off the CO if the column (number) density of H2 
+				//was less than 10^21. This is from C. Qi et al 2011, and Rosenfeld 2013
+				//Now, it gets smoothly decreased over an order of magnitude around 10^21
+				if(type!=continuum){
+					double colNumDens=dens.colDensAbove(pos.r(),pos.theta(),pos.phi())/amu/2.0;
+					//I'm further complicating this by smoothly phasing out the CO
+					double factor;
+					if(colNumDens <= 5e20){
+						factor=0;
+					}else if(colNumDens <= 1.5e21){
+						factor=(colNumDens-5e20)/(1e21);
+					}else{
+						factor=1;
+					}
+					d*=factor;
 				}
-				d*=factor;
 				
 				double temp=diskTemp(pos.r(),pos.theta(),pos.phi()); //starting temp
 				temperatures.push_back(temp);
