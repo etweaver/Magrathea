@@ -1,11 +1,5 @@
-/*
- *  diskPhysics.h
- *  
- *
- *  Created by Erik on 4/17/15.
- *  Copyright 2015 __MyCompanyName__. All rights reserved.
- *
- */
+#ifndef DISKPHYSICS_H
+#define DISKPHYSICS_H
 
 #include <cmath>
 #include <fstream>
@@ -573,3 +567,4 @@ struct dustOpacity{
 		return outputs;
 	}
 };
+#endif

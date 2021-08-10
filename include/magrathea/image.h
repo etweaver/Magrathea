@@ -4,6 +4,9 @@
  *  Created by Erik on 3/19/15.
  */
 
+#ifndef IMAGE_H
+#define IMAGE_H
+
 //the image that will be displayed
 //each pixel's value will be the result of a ray that goes out, normal
 //to the surface, which propagates through the disk
@@ -1244,3 +1247,4 @@ struct radialImage{
 	
 	
 };
+#endif

@@ -10,6 +10,8 @@
  *  theta is the polar angle, and phi is the azimuthal angle.
  *  
  */
+#ifndef GEOMETRY_H
+#define GEOMETRY_H
 
 #include <cmath>
 #include <cstddef>
@@ -341,3 +343,5 @@ shortIntersectionList<2> lineConeIntersect(line l, cone c);
 double lengthThroughCell(line l, plane p1, plane p2, sphere s1, sphere s2, cone c1, cone c2);
 
 const vect origin(0,0,0);
+
+#endif

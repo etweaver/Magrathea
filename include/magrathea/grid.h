@@ -10,6 +10,8 @@
  *  theta is the polar angle, and phi is the azimuthal angle.
  *  
  */
+#ifndef GRID_H
+#define GRID_H
 
 #include <algorithm>
 #include <cassert>
@@ -1075,3 +1077,4 @@ public:
 	
 	
 };
+#endif
