@@ -253,11 +253,11 @@ class grid{
 public:
 	double rmin, rmax, tmin, tmax, pmin, pmax;	//starting/ending values for each dimension
 	double starMass;
-	std::string opacityFile;	//file describing dust opacity
 	std::shared_ptr<density_base> dens;
 	std::shared_ptr<density_base> dustDens;//used when the dust and gas structures don't match
 	std::shared_ptr<temperature_base> diskTemp;
-	dustOpacity dust_opac;
+	std::shared_ptr<opacity_base> dustOpac;
+	std::shared_ptr<opacity_base> lineOpac;
 	bool freezeout;
 	double turbulence;
 	
@@ -272,34 +272,38 @@ public:
 	}
 	
 	//standard, including a dust and gas structure
-	grid(double rmin,double rmax,double tmin,double tmax, double starMass, std::string opacityFile, 
+	grid(double rmin,double rmax,double tmin,double tmax, double starMass, 
 		std::shared_ptr<density_base> dens, std::shared_ptr<density_base> dustDens, 
-		std::shared_ptr<temperature_base> diskTemp, bool freezeout, double turb):
+		std::shared_ptr<temperature_base> diskTemp, std::shared_ptr<opacity_base> dustOpac,
+		std::shared_ptr<opacity_base> lineOpac, bool freezeout, double turb):
 		rmin(rmin), rmax(rmax), tmin(tmin), tmax(tmax), pmin(0),pmax(2*pi),
-		starMass(starMass), opacityFile(opacityFile), dens(dens), dustDens(dustDens), diskTemp(diskTemp), 
-		dust_opac(opacityFile), freezeout(freezeout), turbulence(turb){	}
+		starMass(starMass), dens(dens), dustDens(dustDens), diskTemp(diskTemp), 
+		dustOpac(dustOpac), lineOpac(lineOpac), freezeout(freezeout), turbulence(turb){	}
 	
 	//simple continuum-only constructor
-	grid(double rmin, double rmax, double tmin, double tmax, double starMass, std::string opacityFile, 
-		std::shared_ptr<density_base> dustDens, std::shared_ptr<temperature_base> diskTemp):
+	grid(double rmin, double rmax, double tmin, double tmax, double starMass,
+		std::shared_ptr<density_base> dustDens, std::shared_ptr<temperature_base> diskTemp,
+		std::shared_ptr<opacity_base> dustOpac):
 		rmin(rmin), rmax(rmax), tmin(tmin), tmax(tmax), pmin(0),pmax(2*pi),
-		starMass(starMass), opacityFile(opacityFile), dens(std::make_shared<density_base>()), dustDens(dustDens), diskTemp(diskTemp), 
-		dust_opac(opacityFile), freezeout(false), turbulence(0){	}
+		starMass(starMass), dens(std::make_shared<density_base>()), dustDens(dustDens), diskTemp(diskTemp), 
+		dustOpac(dustOpac), lineOpac(std::make_shared<opacity_base>()), freezeout(false), turbulence(0){	}
 
 
 	//copy
 	//Currently real broken
 	grid(const grid& other):rmin(other.rmin), rmax(other.rmax),tmin(other.tmin),tmax(other.tmax),pmin(other.pmin),pmax(other.pmax), 
-	opacityFile(other.opacityFile), dens(other.dens), dustDens(other.dustDens),
-	dust_opac(other.opacityFile), freezeout(other.freezeout), turbulence(other.turbulence){	}
+	dens(other.dens), dustDens(other.dustDens),	dustOpac(other.dustOpac), lineOpac(other.lineOpac), 
+	freezeout(other.freezeout), turbulence(other.turbulence){	}
 	
 	//assignment
 	grid& operator= (const grid& other){
 		if(this!=&other){
 			rmin=other.rmin; rmax=other.rmax; tmin=other.tmin;
 			tmax=other.tmax; pmin=other.pmin; pmax=other.pmax;
-			opacityFile=other.opacityFile, dens=other.dens, dustDens=other.dustDens, 
-			diskTemp=other.diskTemp, freezeout=other.freezeout, turbulence=other.turbulence;
+			dens=other.dens, dustDens=other.dustDens, 
+			diskTemp=other.diskTemp, 
+			dustOpac=other.dustOpac; lineOpac=other.lineOpac;
+			freezeout=other.freezeout, turbulence=other.turbulence;
 		}
 		return *this;
 	}
@@ -447,8 +451,6 @@ public:
 		vect dir=l.direction/-l.direction.mag(); //ensure unit vector
 		//std::cout << "pos:" << l.position << "\tdir: " << l.direction << std::endl;
 		//std::cout << "dir: " << dir << std::endl;
-		COopacFast COopac(1,iso_12CO);	//set up the CO opacity object
-		//H2Oopac COopac(2);
 		std::vector<double> value (frequencies.size(),0);	//final results will go here
 		std::vector<double> opticalDepth (frequencies.size(),0); //for diagnostics
 		std::vector<double> temperatures; //temps at each step through the disk
@@ -512,7 +514,7 @@ public:
 			
 				for(int i=0;i<frequencies.size();i++){
 					double newfreq=doppler(frequencies[i],velocity);
-					double dustOp=dust_opac(newfreq);
+					double dustOp=(*dustOpac)(newfreq);
 					double BB=blackBody(temp,newfreq);
 					double opacity;
 					if(type==continuum){
@@ -520,17 +522,17 @@ public:
 						valNew[i]=(stepsize*opacity*BB+value[i]*(1-stepsize*opacity/2))/(1+stepsize*opacity/2);
 						//std::cout << "dens: " << ddust << "\tTemp: " << temp << "\tOpac: " << dustOp <<	std::endl;	
 					}else if(type==normal || type==subtracted_bad || type==subtracted_real){
-						opacity=d*COopac(temp,newfreq,turbulence*soundspeed,freezeout)+ddust*dustOp;
+						opacity=d*(*lineOpac)(temp,newfreq,turbulence*soundspeed,freezeout)+ddust*dustOp;
 						valNew[i]=(stepsize*opacity*BB+value[i]*(1-stepsize*opacity/2))/(1+stepsize*opacity/2);
 						//std::cout << stepcount << "\t" << pos.x/AU << "\t" << pos.y/AU << "\t" << pos.z/AU << "\tdens: " << ddust << "\tTemp: " << temp << "\tOpac: " << opacity <<	std::endl;
 					}else if(type==attenuated_continuum){
 						double opacityDust=ddust*dustOp;
-						double opacityBoth=d*COopac(temp,newfreq,turbulence*soundspeed,freezeout)+ddust*dustOp;
+						double opacityBoth=d*(*lineOpac)(temp,newfreq,turbulence*soundspeed,freezeout)+ddust*dustOp;
 						opacity=opacityDust; //for calculating the optical depth
 						valNew[i]=(stepsize*opacityDust*BB+value[i]*(1-stepsize*opacityBoth/2))/(1+stepsize*opacityBoth/2);
 					}
 					if(type==subtracted_bad || type==subtracted_real){
-						opacity=d*COopac(temp,newfreq,turbulence*soundspeed,freezeout);//in the subtracted cases, the optical depth is just that of the line
+						opacity=d*(*lineOpac)(temp,newfreq,turbulence*soundspeed,freezeout);//in the subtracted cases, the optical depth is just that of the line
 					}
 					//std::cout << value[i] << "\t" << valueSlow[i] << "\t" << opticalDepth[i] << "\t" << stepsize*opacity*BB << "\t" << exp(-opticalDepth[i]) << std::endl;
 					//valueSlow[i]+=stepsize*opacity*BB * (exp(-opticalDepth[i]));
@@ -564,14 +566,14 @@ public:
 					double soundspeed=sqrt(temp*kboltzmann/(3.819239518e-24));
 					for(int i=0;i<frequencies.size();i++){
 						double newfreq=doppler(frequencies[i],velocity);
-						double dustOp=dust_opac(newfreq);
+						double dustOp=(*dustOpac)(newfreq);
 						double BB=blackBody(temp,newfreq);
 						if(type==subtracted_bad){
 							double opacity= ddust*dustOp;					
 							valNew[i]=(stepsize*opacity*BB+valueSpecial[i]*(1-stepsize*opacity/2))/(1+stepsize*opacity/2);
 						}else if(type==subtracted_real){
 							double opacityDust=ddust*dustOp;
-							double opacityBoth=d*COopac(temp,newfreq,turbulence*soundspeed,freezeout)+ddust*dustOp;
+							double opacityBoth=d*(*lineOpac)(temp,newfreq,turbulence*soundspeed,freezeout)+ddust*dustOp;
 							valNew[i]=(stepsize*opacityDust*BB+valueSpecial[i]*(1-stepsize*opacityBoth/2))/(1+stepsize*opacityBoth/2);
 						}
 					}
@@ -609,7 +611,6 @@ public:
 		vect dir=l.direction/-l.direction.mag(); //ensure unit vector
 		//std::cout << "pos:" << l.position << "\tdir: " << l.direction << std::endl;
 		//std::cout << "dir: " << dir << std::endl;
-		COopacFast COopac(1,iso_12CO);	//set up the CO opacity object
 		std::vector<Vec4d,aligned_allocator<Vec4d> > value (freqsAVX.size(),0,aligned_allocator<Vec4d>(5));	//final results will go here
 		std::vector<Vec4d,aligned_allocator<Vec4d> > opticalDepth (freqsAVX.size(),0,aligned_allocator<Vec4d>(5)); //for diagnostics
 		std::vector<double> temperatures; //temps at each step through the disk
@@ -673,7 +674,7 @@ public:
 			
 				for(int i=0;i<freqsAVX.size();i++){
 					Vec4d newfreq=dopplerAVX(freqsAVX[i],velocity);
-					Vec4d dustOp=dust_opac(newfreq);
+					Vec4d dustOp=(*dustOpac)(newfreq);
 					Vec4d BB=blackBodyAVX(temp,newfreq);
 					Vec4d opacity;
 					if(type==continuum){
@@ -681,7 +682,7 @@ public:
 						valNew[i]=(stepsize*opacity*BB+value[i]*(1-stepsize*opacity/2))/(1+stepsize*opacity/2);
 						//std::cout << "dens: " << ddust << "\tTemp: " << temp << "\tOpac: " << dustOp <<	std::endl;	
 					}else if(type==normal){
-						opacity=d*COopac(temp,newfreq,turbulence*soundspeed,freezeout)+ddust*dustOp;
+						opacity=d*(*lineOpac)(temp,newfreq,turbulence*soundspeed,freezeout)+ddust*dustOp;
 						valNew[i]=(stepsize*opacity*BB+value[i]*(1-stepsize*opacity/2))/(1+stepsize*opacity/2);
 						//std::cout << "dens: " << ddust << "\tTemp: " << temp << "\tOpac: " << opacity <<	std::endl;
 					//std::cout << value[i] << "\t" << valueSlow[i] << "\t" << opticalDepth[i] << "\t" << stepsize*opacity*BB << "\t" << exp(-opticalDepth[i]) << std::endl;
@@ -906,7 +907,6 @@ public:
 		vect dir=l.direction/-l.direction.mag(); //ensure unit vector
 		//std::cout << "pos:" << l.position << "\tdir: " << l.direction << std::endl;
 		//std::cout << "dir: " << dir << std::endl;
-		COopacFast COopac(2,iso_12CO);	//set up the CO opacity object
 		double opticalDepth=0;
 		std::vector<widthInfo> allThree2; //for each step, a pair of vect,taus for each freq
 		std::vector<double> temperatures; //temps at each step through the disk
@@ -934,10 +934,10 @@ public:
 				widthInfo posIntTau;//position,intensity, and optical depth at s
 			
 				double newfreq=doppler(frequency,velocity);
-				double dustOp=dust_opac(newfreq);
+				double dustOp=(*dustOpac)(newfreq);
 				double BB=blackBody(temp,newfreq);
 				double opacity;
-				opacity=d*COopac(temp,newfreq,turbulence*soundspeed,freezeout)+ddust*dustOp;
+				opacity=d*(*lineOpac)(temp,newfreq,turbulence*soundspeed,freezeout)+ddust*dustOp;
 				valueSlow+=stepsize*opacity*BB * (exp(-opticalDepth));
 				opticalDepth+=(stepsize*opacity);
 					
@@ -1054,7 +1054,6 @@ public:
 		vect dir=l.direction/-l.direction.mag(); //ensure unit vector
 		//std::cout << "pos:" << l.position << "\tdir: " << l.direction << std::endl;
 		//std::cout << "dir: " << dir << std::endl;
-		COopacFast COopac(2,iso_12CO);	//set up the CO opacity object
 		double opticalDepth=0;
 		std::vector<double> temperatures; //temps at each step through the disk
 		double valueSlow=0;
@@ -1088,10 +1087,10 @@ public:
 				stats.push_back(valueSlow);
 			
 				double newfreq=doppler(frequency,velocity);
-				double dustOp=dust_opac(newfreq);
+				double dustOp=(*dustOpac)(newfreq);
 				double BB=blackBody(temp,newfreq);
 				double opacity;
-				opacity=d*COopac(temp,newfreq,turbulence*soundspeed,freezeout)+ddust*dustOp;
+				opacity=d*(*lineOpac)(temp,newfreq,turbulence*soundspeed,freezeout)+ddust*dustOp;
 				valueSlow+=stepsize*opacity*BB * (exp(-opticalDepth));
 				opticalDepth+=(stepsize*opacity);
 				
@@ -1104,7 +1103,6 @@ public:
 		
 		return(results);
 	}
-	
 	
 };
 #endif

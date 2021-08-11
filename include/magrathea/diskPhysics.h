@@ -230,24 +230,45 @@ struct expCutoffDensityNoRings {
 	}
 };
 
+//base opacity class.
+//users can define their own, though it's much harder than for temperatures or 
+//densities, since this requires two overloaded call operators, one of which 
+//must be vectorized
+//The basic continuum opacity, typically read in from a table, depends only 
+//on frequency
+struct opacity_base{
+	virtual double operator()(double frequency) const{
+		return 0;
+	}
+	virtual Vec4d operator()(Vec4d frequency) const{
+		return 0;
+	}
+	virtual double operator()(double temperature, double frequency, double vTurb, bool freezeout) const{
+		return 0;
+	}
+	virtual Vec4d operator()(double temperature, Vec4d frequency, double vTurb, bool freezeout) const{
+		return 0;
+	}
+};
+
+
+
 //used for velocity calculation. See Bertin&Lodato eq 4 for details of the integral
 //double integrand(double rprime, void* p);
-
-enum isotopologue_type { iso_12CO, iso_13CO, iso_C17O, iso_C18O };
 
 //Opacity of C12O16. See Isella et al 2007
 //This is a functor so that I can do as much of the calculation ahead of time as possible
 //The calculation of the partition function is based on a Taylor expansion. For details,
 //see Mangum and Shirley 2015.
-//Later I'll add capability to choose which isotopologue you want. For now C12O16 is good.
 struct COopacFast {
 	double COFraction, dipoleMoment, COmass,B;
 	double densityRatio; //ratio of chosen isotopologue to 12CO
 	int lowerEnergyLevel;
-	isotopologue_type isot;
 	double* transitionTemps;
 	double* restFrequencies;
 	double* einsteinAs;
+	enum isotopologue_type { iso_12CO, iso_13CO, iso_C17O, iso_C18O };
+	isotopologue_type isot;
 		
 	COopacFast(int lowerEnergyLevel, isotopologue_type isot) : lowerEnergyLevel(lowerEnergyLevel){
 		setTransitionTemps(isot);
@@ -477,7 +498,7 @@ struct paramTemp{
 
 //Opacity of the dust is complicated and is best calculated elsewhere.
 //It can be read in from a file.
-struct dustOpacity{
+struct dustOpacity:public opacity_base{
 	std::vector<std::pair<double,double> > freqsAndOpacs;
 	
 	dustOpacity(){	}
@@ -531,8 +552,8 @@ struct dustOpacity{
 		return outputOpac;
 	}
 	
-//this one really doesn't benifit from being vectorized since it's literally just a 
-//table lookup, but I need an AVX version for compatibility with the other stuff.
+	//this one really doesn't benifit from being vectorized since it's literally just a 
+	//table lookup, but I need an AVX version for compatibility with the other stuff.
 	Vec4d operator () (Vec4d freqs) const{
 		if(freqsAndOpacs.size()==0){
 			std::cout << "Can't interpolate on empty opacity list" << std::endl;
