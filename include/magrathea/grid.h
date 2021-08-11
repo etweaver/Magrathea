@@ -218,15 +218,45 @@ public:
 	}
 };
 
-template<class density, class temperature>
+//the density_base provides the abstract template for user defined density classes
+//The primary requirement is dervided classes provide an overloaded call operator
+//which takes an r, theta, and phi coordinate and returns the density as a double.
+//There is also a virtual columnDensityAbove function, which is available for 
+//calculation of photodisassociation
+class density_base{
+public:
+	virtual double operator()(double r, double theta, double phi)const{
+		return 0;
+	}
+	//the main use of the scaleHeight function is checking if we should contract the stepsize.
+	//If the user makes their own density that doesn't provide this, we just get this default
+	//version, whichn returns 1cm. We can't return 0, since we divide by this value, but at 1cm,
+	//it won't do the contraction.
+	virtual double scaleHeight(double r)const{
+		return 1;
+	}
+	virtual double colDensAbove(double r, double theta, double phi)const{
+		return 0;
+	}
+};
+
+//Because far fewer assumptions can be made of the temperature structure, there can't 
+//necessarily be analogues of the scale height, etc, and the interface is much simpler.
+class temperature_base{
+public:
+	virtual double operator()(double r, double theta, double phi)const{
+		return 0;
+	}
+};
+
 class grid{
 public:
 	double rmin, rmax, tmin, tmax, pmin, pmax;	//starting/ending values for each dimension
 	double starMass;
 	std::string opacityFile;	//file describing dust opacity
-	density dens;
-	density dustDens;//used when the dust and gas structures don't match
-	temperature diskTemp;
+	std::shared_ptr<density_base> dens;
+	std::shared_ptr<density_base> dustDens;//used when the dust and gas structures don't match
+	std::shared_ptr<temperature_base> diskTemp;
 	dustOpacity dust_opac;
 	bool freezeout;
 	double turbulence;
@@ -236,22 +266,24 @@ public:
 	//empty
 	grid(){
 		rmin=0; rmax=0; tmin=0; tmax=0; pmin=0; pmax=0;
+		dens=NULL; dustDens=NULL; diskTemp=NULL;
 		freezeout=false;
 		turbulence=0;
 	}
 	
 	//standard, including a dust and gas structure
 	grid(double rmin,double rmax,double tmin,double tmax, double starMass, std::string opacityFile, 
-		density dens, density dustDens, temperature diskTemp, bool freezeout, double turb):
+		std::shared_ptr<density_base> dens, std::shared_ptr<density_base> dustDens, 
+		std::shared_ptr<temperature_base> diskTemp, bool freezeout, double turb):
 		rmin(rmin), rmax(rmax), tmin(tmin), tmax(tmax), pmin(0),pmax(2*pi),
 		starMass(starMass), opacityFile(opacityFile), dens(dens), dustDens(dustDens), diskTemp(diskTemp), 
 		dust_opac(opacityFile), freezeout(freezeout), turbulence(turb){	}
 	
 	//simple continuum-only constructor
 	grid(double rmin, double rmax, double tmin, double tmax, double starMass, std::string opacityFile, 
-		density dustDens, temperature diskTemp):
+		std::shared_ptr<density_base> dustDens, std::shared_ptr<temperature_base> diskTemp):
 		rmin(rmin), rmax(rmax), tmin(tmin), tmax(tmax), pmin(0),pmax(2*pi),
-		starMass(starMass), opacityFile(opacityFile), dens(), dustDens(dustDens), diskTemp(diskTemp), 
+		starMass(starMass), opacityFile(opacityFile), dens(std::make_shared<density_base>()), dustDens(dustDens), diskTemp(diskTemp), 
 		dust_opac(opacityFile), freezeout(false), turbulence(0){	}
 
 
@@ -266,7 +298,7 @@ public:
 		if(this!=&other){
 			rmin=other.rmin; rmax=other.rmax; tmin=other.tmin;
 			tmax=other.tmax; pmin=other.pmin; pmax=other.pmax;
-			opacityFile=other.opacityFile, dens=other.dense, dustDens=other.dustDens, 
+			opacityFile=other.opacityFile, dens=other.dens, dustDens=other.dustDens, 
 			diskTemp=other.diskTemp, freezeout=other.freezeout, turbulence=other.turbulence;
 		}
 		return *this;
@@ -431,33 +463,33 @@ public:
 			bool isShrunk=false;
 			
 			//double numScaleHeights; 
-			double numScaleHeights=(pos).z/dustDens.scaleHeight((pos).r()*sin((pos).theta()));
+			double numScaleHeights=(pos).z/dustDens->scaleHeight((pos).r()*sin((pos).theta()));
 			while (remainingDist >= stepsize/2) {
-				double numScaleHeightsNext=(pos+dir*stepsize).z/dustDens.scaleHeight((pos+dir*stepsize).r()*sin((pos+dir*stepsize).theta()));
+				double numScaleHeightsNext=(pos+dir*stepsize).z/dustDens->scaleHeight((pos+dir*stepsize).r()*sin((pos+dir*stepsize).theta()));
 				if(!isShrunk && ((numScaleHeightsNext > -2.5 && numScaleHeights < -2.5) || (numScaleHeightsNext < 2.5 && numScaleHeights > 2.5))){
 					//std::cout << "shrinking step size" << std::endl;
 					isShrunk=true;
 					stepsize /= 10;
-					numScaleHeightsNext=(pos+dir*stepsize).z/dustDens.scaleHeight((pos+dir*stepsize).r()*sin((pos+dir*stepsize).theta()));
+					numScaleHeightsNext=(pos+dir*stepsize).z/dustDens->scaleHeight((pos+dir*stepsize).r()*sin((pos+dir*stepsize).theta()));
 				}
 				if(isShrunk && ((numScaleHeightsNext > 2.5 && numScaleHeights < 2.5) || (numScaleHeightsNext < -2.5 && numScaleHeights > -2.5))){
 					//std::cout << "expanding step size" << std::endl;
 					isShrunk=false;
 					stepsize *= 10;
-					numScaleHeightsNext=(pos+dir*stepsize).z/dustDens.scaleHeight((pos+dir*stepsize).r()*sin((pos+dir*stepsize).theta()));
+					numScaleHeightsNext=(pos+dir*stepsize).z/dustDens->scaleHeight((pos+dir*stepsize).r()*sin((pos+dir*stepsize).theta()));
 				}
 				numScaleHeights=numScaleHeightsNext;
 				//std::cout << stepcount << "\t" << pos.z/AU << "\t" << numScaleHeights << "\t" << numScaleHeightsNext << std::endl;
-				
 				//densities of gas and dust.
 				//For CO, which we're using here, we add a factor to account for photodissociation 
-				double d=dens(pos.r(),pos.theta(),pos.phi());	//gas density
-				double ddust=dustDens(pos.r(),pos.theta(),pos.phi());	//seperate dust density
+				double d=(*dens)(pos.r(),pos.theta(),pos.phi());	//gas density
+				double ddust=(*dustDens)(pos.r(),pos.theta(),pos.phi());	//seperate dust density
+				
 				//Previously, I just turned off the CO if the column (number) density of H2 
 				//was less than 10^21. This is from C. Qi et al 2011, and Rosenfeld 2013
 				//Now, it gets smoothly decreased over an order of magnitude around 10^21
 				if(type!=continuum){
-					double colNumDens=dens.colDensAbove(pos.r(),pos.theta(),pos.phi())/amu/2.0;
+					double colNumDens=dens->colDensAbove(pos.r(),pos.theta(),pos.phi())/amu/2.0;
 					//I'm further complicating this by smoothly phasing out the CO
 					double factor;
 					if(colNumDens <= 5e20){
@@ -469,7 +501,7 @@ public:
 					}
 					d*=factor;
 				}
-				double temp=diskTemp(pos.r(),pos.theta(),pos.phi()); //starting temp
+				double temp=(*diskTemp)(pos.r(),pos.theta(),pos.phi()); //starting temp
 				temperatures.push_back(temp);
 		
 				double r_cyl=pos.r()*sin(pos.theta());	//cylindrical radius
@@ -523,9 +555,9 @@ public:
 				std::vector<double> valNew(frequencies.size(),0);
 				pos+=dir*stepsize/2;
 				while (remainingDist >= stepsize/2) {
-					double d=dens(pos.r(),pos.theta(),pos.phi());	//gas density
-					double ddust=dustDens(pos.r(),pos.theta(),pos.phi());	//seperate dust density
-					double temp=diskTemp(pos.r(),pos.theta(),pos.phi());	//starting temp
+					double d=(*dens)(pos.r(),pos.theta(),pos.phi());	//gas density
+					double ddust=(*dustDens)(pos.r(),pos.theta(),pos.phi());	//seperate dust density
+					double temp=(*diskTemp)(pos.r(),pos.theta(),pos.phi());	//starting temp
 					double r_cyl=pos.r()*sin(pos.theta());	//cylindrical radius
 					double azdif=(cameraPosition.phi()-pos.phi());//difference between the camera orientation and the point in question
 					double velocity=sqrt(gravConst*starMass/r_cyl/r_cyl/r_cyl)*r_cyl*sin(cameraPosition.theta())*cos(-pi/2+azdif);//velocity with respect to LOS
@@ -593,31 +625,31 @@ public:
 			
 			//double numScaleHeights; 
 			double scaleHeightLimit=2; //how many scale heights above/below the midplane we increase the stepsize for
-			double numScaleHeights=(pos).z/dustDens.scaleHeight((pos).r()*sin((pos).theta()));
+			double numScaleHeights=(pos).z/dustDens->scaleHeight((pos).r()*sin((pos).theta()));
 			while (remainingDist >= stepsize/2) {
-				double numScaleHeightsNext=(pos+dir*stepsize).z/dustDens.scaleHeight((pos+dir*stepsize).r()*sin((pos+dir*stepsize).theta()));
+				double numScaleHeightsNext=(pos+dir*stepsize).z/dustDens->scaleHeight((pos+dir*stepsize).r()*sin((pos+dir*stepsize).theta()));
 				if(!isShrunk && ((numScaleHeightsNext > -scaleHeightLimit && numScaleHeights < -scaleHeightLimit) || (numScaleHeightsNext < scaleHeightLimit && numScaleHeights > scaleHeightLimit))){
 					//std::cout << "shrinking step size" << std::endl;
 					isShrunk=true;
 					stepsize /= 3;
-					numScaleHeightsNext=(pos+dir*stepsize).z/dustDens.scaleHeight((pos+dir*stepsize).r()*sin((pos+dir*stepsize).theta()));
+					numScaleHeightsNext=(pos+dir*stepsize).z/dustDens->scaleHeight((pos+dir*stepsize).r()*sin((pos+dir*stepsize).theta()));
 				}
 				if(isShrunk && ((numScaleHeightsNext > scaleHeightLimit && numScaleHeights < scaleHeightLimit) || (numScaleHeightsNext < -scaleHeightLimit && numScaleHeights > -scaleHeightLimit))){
 					//std::cout << "expanding step size" << std::endl;
 					isShrunk=false;
 					stepsize *= 3;
-					numScaleHeightsNext=(pos+dir*stepsize).z/dustDens.scaleHeight((pos+dir*stepsize).r()*sin((pos+dir*stepsize).theta()));
+					numScaleHeightsNext=(pos+dir*stepsize).z/dustDens->scaleHeight((pos+dir*stepsize).r()*sin((pos+dir*stepsize).theta()));
 				}
 				numScaleHeights=numScaleHeightsNext;
 				//std::cout << stepcount << "\t" << pos.z/AU << "\t" << numScaleHeights << "\t" << numScaleHeightsNext << std::endl;
 				
-				double d=dens(pos.r(),pos.theta(),pos.phi());	//gas density
-				double ddust=dustDens(pos.r(),pos.theta(),pos.phi());	//seperate dust density
+				double d=(*dens)(pos.r(),pos.theta(),pos.phi());	//gas density
+				double ddust=(*dustDens)(pos.r(),pos.theta(),pos.phi());	//seperate dust density
 				//Previously, I just turned off the CO if the column (number) density of H2 
 				//was less than 10^21. This is from C. Qi et al 2011, and Rosenfeld 2013
 				//Now, it gets smoothly decreased over an order of magnitude around 10^21
 				if(type!=continuum){
-					double colNumDens=dens.colDensAbove(pos.r(),pos.theta(),pos.phi())/amu/2.0;
+					double colNumDens=dens->colDensAbove(pos.r(),pos.theta(),pos.phi())/amu/2.0;
 					//I'm further complicating this by smoothly phasing out the CO
 					double factor;
 					if(colNumDens <= 5e20){
@@ -630,7 +662,7 @@ public:
 					d*=factor;
 				}
 				
-				double temp=diskTemp(pos.r(),pos.theta(),pos.phi()); //starting temp
+				double temp=(*diskTemp)(pos.r(),pos.theta(),pos.phi()); //starting temp
 				temperatures.push_back(temp);
 		
 				double r_cyl=pos.r()*sin(pos.theta());	//cylindrical radius
@@ -818,7 +850,7 @@ public:
 		
 		for(int i=0;i<nsteps;i++){
 			line path(pos,down);
-			results.push_back(propagateRay(path, frequencies, pos, type));
+			results.push_back(propagateRay(path, frequencies, pos, type, nsteps));
 			pos.x+=radialStep;
 		}
 		//print to file if there is only one frequency.
@@ -883,16 +915,15 @@ public:
 	
 		for(auto pair : diskPairs){
 			int stepcount=0;
-			double dustToGasRatio = 1e-2;
 			vect pos=pair.first.location; //starting point
 			double remainingDist=(pair.second.location-pair.first.location).mag(); //the total distance along which to integrate
 			double stepsize = remainingDist/nsteps;	//currently nonadaptive stepsize
 			pos+=dir*stepsize/2;
 		
 			while (remainingDist >= stepsize/2) {
-				double d=dens(pos.r(),pos.theta(),pos.phi());	//gas density
-				double ddust=dustDens(pos.r(),pos.theta(),pos.phi())*dustToGasRatio;	//seperate dust density
-				double temp=diskTemp(pos.r(),pos.theta(),pos.phi());	//starting temp
+				double d=(*dens)(pos.r(),pos.theta(),pos.phi());	//gas density
+				double ddust=(*dustDens)(pos.r(),pos.theta(),pos.phi());	//seperate dust density
+				double temp=(*diskTemp)(pos.r(),pos.theta(),pos.phi());	//starting temp
 				temperatures.push_back(temp);
 		
 				double r_cyl=pos.r()*sin(pos.theta());	//cylindrical radius
@@ -987,7 +1018,7 @@ public:
 		double mindif=std::numeric_limits<double>::max(); //we want to minimize the difference between t_phys and b_temp
 		//std::cout << "btemp: " << bTemp << std::endl;
 		for(int j=0;j<allThree2.size();j++){
-			double tPhysical=temperature(allThree2[j].pos.r(),allThree2[j].pos.theta(),allThree2[j].pos.phi());
+			double tPhysical=(*diskTemp)(allThree2[j].pos.r(),allThree2[j].pos.theta(),allThree2[j].pos.phi());
 			double dif = std::abs(tPhysical-bTemp);
 			//std::cout << tempindex << "\t" << tPhysical << "\t" << dif << "\t" << allThree2[j][i].pos.z/AU << std::endl;
 			if(dif<mindif){
@@ -1033,7 +1064,6 @@ public:
 		
 		for(auto pair : diskPairs){
 			int stepcount=0;
-			double dustToGasRatio = 1e-2;
 			vect pos=pair.first.location; //starting point
 			double remainingDist=(pair.second.location-pair.first.location).mag(); //the total distance along which to integrate
 			double stepsize = remainingDist/nsteps;	//currently nonadaptive stepsize
@@ -1041,9 +1071,9 @@ public:
 			
 			while (remainingDist >= stepsize/2) {
 				std::vector<double> stats; //z position, temperature, density, intensity etc for this ray
-				double d=dens(pos.r(),pos.theta(),pos.phi());	//gas density
-				double ddust=dustDens(pos.r(),pos.theta(),pos.phi())*dustToGasRatio;	//seperate dust density
-				double temp=diskTemp(pos.r(),pos.theta(),pos.phi());	//starting temp
+				double d=(*dens)(pos.r(),pos.theta(),pos.phi());	//gas density
+				double ddust=(*dustDens)(pos.r(),pos.theta(),pos.phi());	//seperate dust density
+				double temp=(*diskTemp)(pos.r(),pos.theta(),pos.phi());	//starting temp
 				temperatures.push_back(temp);
 		
 				double r_cyl=pos.r()*sin(pos.theta());	//cylindrical radius

@@ -80,8 +80,7 @@ public:
 	//new version that can be offset. Removing the galario padding.
 	//casa expects that the pixel position and value correspond to the pixel corner
 	//I hate this, but have to reimplement it here for compatibility.
-	template<class density, class temperature>
-	void propagate(const grid<density, temperature>& g, typename grid<density,temperature>::prop_type type, const vect& offset, ThreadPool& pool, bool avx, unsigned int nsteps){
+	void propagate(const grid& g, typename grid::prop_type type, const vect& offset, ThreadPool& pool, bool avx, unsigned int nsteps){
 		//we need to repackage the frequencies into groups of four for the avx version
 		unsigned int nfreqsAVX=frequencies.size()/4;
 		unsigned int extra=frequencies.size()%4;
@@ -1218,14 +1217,16 @@ struct radialImage{
 	};
 	std::vector<point> data;
 	double rmin, rmax;
-	unsigned int npoints;
+	unsigned int npoints, nsteps;
 	
-	radialImage():rmin(0),rmax(0),npoints(0) {}
-	radialImage(double rmin, double rmax, unsigned int npoints):rmin(rmin),rmax(rmax),npoints(npoints),data(){}
-	radialImage(const radialImage& other):rmin(other.rmin),rmax(other.rmax),npoints(other.npoints),data(other.data){}
+	radialImage():rmin(0),rmax(0),npoints(0),nsteps(0) {}
+	radialImage(double rmin, double rmax, unsigned int npoints, unsigned int nsteps):
+		rmin(rmin),rmax(rmax),npoints(npoints),nsteps(nsteps),data(){}
+	radialImage(const radialImage& other):rmin(other.rmin),rmax(other.rmax),npoints(other.npoints),
+		nsteps(other.nsteps),data(other.data){}
 	
 	template<class density, class temperature>
-	void propagate(const grid<density,temperature>& g, typename grid<density,temperature>::prop_type type){
+	void propagate(const grid& g, typename grid::prop_type type){
 		data.clear();
 		std::vector<double> frequencies; //for now, this will just be moonochromatic
 		frequencies.push_back(230.358e9);
@@ -1238,9 +1239,9 @@ struct radialImage{
 		for(int i=0;i<npoints;i++,rpos+=stepsize){
 			vect pos(rpos,0,1e18); //keep y at 0, keep z way above the disk
 			line path(pos,down);
-			std::vector<double> pix=g.propagateRay(path,frequencies,pos,type);
+			std::vector<double> pix=g.propagateRay(path,frequencies,pos,type,nsteps);
 			double btemp=tempFromSurfaceBrightness(pix[0], 230.358e9);
-			double midptemp=g.temperature(rpos,pi/2,0);
+			double midptemp=(*(g.diskTemp))(rpos,pi/2,0);
 			data.push_back(point(rpos,btemp/midptemp));
 		}
 	}
