@@ -445,7 +445,8 @@ public:
 	}
 	
 	//std::vector<std::vector<widthInfo> > propagateRay(const line l, const std::vector<double> frequencies, const vect cameraPosition, prop_type type) const{
-	std::vector<double> propagateRay(const line l, const std::vector<double> frequencies, const vect cameraPosition, prop_type type, unsigned int nsteps) const{
+	std::vector<double> propagateRay(const line l, const std::vector<double> frequencies, const vect cameraPosition, prop_type type, 
+	unsigned int nsteps, double contractionFactor) const{
 		std::vector<std::pair<intersection,intersection> > diskPairs=entriesAndExits(l);
 
 		vect dir=l.direction/-l.direction.mag(); //ensure unit vector
@@ -471,13 +472,13 @@ public:
 				if(!isShrunk && ((numScaleHeightsNext > -2.5 && numScaleHeights < -2.5) || (numScaleHeightsNext < 2.5 && numScaleHeights > 2.5))){
 					//std::cout << "shrinking step size" << std::endl;
 					isShrunk=true;
-					stepsize /= 10;
+					stepsize /= contractionFactor;
 					numScaleHeightsNext=(pos+dir*stepsize).z/dustDens->scaleHeight((pos+dir*stepsize).r()*sin((pos+dir*stepsize).theta()));
 				}
 				if(isShrunk && ((numScaleHeightsNext > 2.5 && numScaleHeights < 2.5) || (numScaleHeightsNext < -2.5 && numScaleHeights > -2.5))){
 					//std::cout << "expanding step size" << std::endl;
 					isShrunk=false;
-					stepsize *= 10;
+					stepsize *= contractionFactor;
 					numScaleHeightsNext=(pos+dir*stepsize).z/dustDens->scaleHeight((pos+dir*stepsize).r()*sin((pos+dir*stepsize).theta()));
 				}
 				numScaleHeights=numScaleHeightsNext;
@@ -600,7 +601,8 @@ public:
 	//same as the basic progagateRay, but with frequencies packed into sets of 4, so we can do AVX operations
 	//for this, I'm taking out the special versions of prop_type, since I probably will never need to do
 	//the incorrect continuum subtraction again.
-	std::vector<double> propagateRayAVX(const line l, const std::vector<Vec4d,aligned_allocator<Vec4d> > freqsAVX, const vect cameraPosition, prop_type type, unsigned int nsteps) const{
+	std::vector<double> propagateRayAVX(const line l, const std::vector<Vec4d,aligned_allocator<Vec4d> > freqsAVX, const vect cameraPosition, prop_type type, 
+	unsigned int nsteps, double contractionFactor) const{
 		if(type==attenuated_continuum || type==subtracted_bad || type==subtracted_real){
 			std::cout << "Error: AVX ray tracing does not support propagation of type " << type << std::endl;
 			exit(1);
@@ -632,13 +634,13 @@ public:
 				if(!isShrunk && ((numScaleHeightsNext > -scaleHeightLimit && numScaleHeights < -scaleHeightLimit) || (numScaleHeightsNext < scaleHeightLimit && numScaleHeights > scaleHeightLimit))){
 					//std::cout << "shrinking step size" << std::endl;
 					isShrunk=true;
-					stepsize /= 3;
+					stepsize /= contractionFactor;
 					numScaleHeightsNext=(pos+dir*stepsize).z/dustDens->scaleHeight((pos+dir*stepsize).r()*sin((pos+dir*stepsize).theta()));
 				}
 				if(isShrunk && ((numScaleHeightsNext > scaleHeightLimit && numScaleHeights < scaleHeightLimit) || (numScaleHeightsNext < -scaleHeightLimit && numScaleHeights > -scaleHeightLimit))){
 					//std::cout << "expanding step size" << std::endl;
 					isShrunk=false;
-					stepsize *= 3;
+					stepsize *= contractionFactor;
 					numScaleHeightsNext=(pos+dir*stepsize).z/dustDens->scaleHeight((pos+dir*stepsize).r()*sin((pos+dir*stepsize).theta()));
 				}
 				numScaleHeights=numScaleHeightsNext;
@@ -834,7 +836,8 @@ public:
 	}*/
 	
 	//this is for the case where the disk is axisymmetric and imaged face on, so r is the only variable
-	void radialImage(const std::string outFileName, const double centFreq, const double freqRange, const int freqBins, unsigned int nsteps, prop_type type){
+	void radialImage(const std::string outFileName, const double centFreq, const double freqRange, const int freqBins, 
+	unsigned int nsteps, prop_type type, double contractionFactor){
 		std::vector<double> frequencies;
 		double freq=centFreq;
 		freq-=freqRange/2;
@@ -851,7 +854,7 @@ public:
 		
 		for(int i=0;i<nsteps;i++){
 			line path(pos,down);
-			results.push_back(propagateRay(path, frequencies, pos, type, nsteps));
+			results.push_back(propagateRay(path, frequencies, pos, type, nsteps, contractionFactor));
 			pos.x+=radialStep;
 		}
 		//print to file if there is only one frequency.
