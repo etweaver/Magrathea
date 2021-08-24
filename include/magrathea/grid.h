@@ -240,6 +240,56 @@ public:
 	}
 };
 
+struct powerLawDisk : public density_base {
+private:
+	double Sigma0;
+	double rc;
+	double h0;
+	double P;//density index
+	double S;//scale height index
+	
+public:
+	powerLawDisk(): Sigma0(0), rc(0), h0(0), P(0), S(0){ }
+	powerLawDisk(const powerLawDisk& other): Sigma0(other.Sigma0), rc(other.rc), h0(other.h0),
+	P(other.P), S(other.S){  }
+	powerLawDisk(double Sigma0, double rc, double h0, double P, double S):
+	Sigma0(Sigma0), rc(rc), h0(h0), P(P), S(S){	}
+
+	powerLawDisk& operator= (const powerLawDisk& other){
+		Sigma0=other.Sigma0; rc=other.rc; h0=other.h0; P=other.P; S=other.S;
+		return *this;
+	}
+
+	double surfaceMassDensity(const double r) const{
+		return (Sigma0*pow(r/rc, -P)) * exp(-(pow(r/rc, 2-P)));
+	}
+
+	double scaleHeight(const double r) const{
+		return (h0*pow(r/rc,S));
+	}
+
+	double operator()(double r, double theta, double phi) const{
+		double r_cyl=r*sin(theta);
+		double z=r*cos(theta);
+		double h=scaleHeight(r_cyl);
+
+		return(((surfaceMassDensity(r_cyl))/(sqrt(2*pi)*h)) * exp(-z*z/(2*h*h)));
+	}
+	
+	//for a given point in the disk, return the column density ABOVE that position
+	//needed to calculate the CO photodisociation
+	//Here, the z that matters is the absolute value, since we want this symmetric
+	//about the midplane;
+	double colDensAbove(double r, double theta, double phi) const{
+		double r_cyl=r*sin(theta);
+		double z=abs(r*cos(theta));
+		double result=surfaceMassDensity(r_cyl)/2;
+		double arg=z/(sqrt(2)*scaleHeight(r_cyl));
+		result *= erfc(arg);
+		return result;
+	}
+};
+
 //Because far fewer assumptions can be made of the temperature structure, there can't 
 //necessarily be analogues of the scale height, etc, and the interface is much simpler.
 class temperature_base{
@@ -494,14 +544,7 @@ public:
 				if(type!=continuum){
 					double colNumDens=dens->colDensAbove(pos.r(),pos.theta(),pos.phi())/amu/2.0;
 					//I'm further complicating this by smoothly phasing out the CO
-					double factor;
-					if(colNumDens <= 5e20){
-						factor=0;
-					}else if(colNumDens <= 1.5e21){
-						factor=(colNumDens-5e20)/(1e21);
-					}else{
-						factor=1;
-					}
+					double factor=lineOpac->disassociationFactor(colNumDens);
 					d*=factor;
 				}
 				double temp=(*diskTemp)(pos.r(),pos.theta(),pos.phi()); //starting temp
@@ -654,14 +697,7 @@ public:
 				if(type!=continuum){
 					double colNumDens=dens->colDensAbove(pos.r(),pos.theta(),pos.phi())/amu/2.0;
 					//I'm further complicating this by smoothly phasing out the CO
-					double factor;
-					if(colNumDens <= 5e20){
-						factor=0;
-					}else if(colNumDens <= 1.5e21){
-						factor=(colNumDens-5e20)/(1e21);
-					}else{
-						factor=1;
-					}
+					double factor=lineOpac->disassociationFactor(colNumDens);
 					d*=factor;
 				}
 				

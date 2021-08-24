@@ -195,41 +195,6 @@ struct expCutoffDensity {
         double operator()(double r, double theta, double phi) const;
 };
 
-
-struct expCutoffDensityNoRings {
-	double Sigma0;
-	double rc;
-	double r0;
-	double h0;
-	double P;//density index
-	double S;//scale height index
-	
-	expCutoffDensityNoRings(): Sigma0(0), rc(0), r0(0), h0(0), P(0), S(0) {	}
-	expCutoffDensityNoRings(const expCutoffDensity& other): Sigma0(other.Sigma0), rc(other.rc), r0(other.r0), h0(other.h0), P(other.P), S(other.S) {	}
-	expCutoffDensityNoRings(double Sigma0, double rc, double r0, double h0, double P, double S): Sigma0(Sigma0), rc(rc), r0(r0), h0(h0), P(P), S(S) {	}
-		
-	expCutoffDensityNoRings& operator= (const expCutoffDensityNoRings& other){
-		Sigma0=other.Sigma0; rc=other.rc; r0=other.r0; h0=other.h0; P=other.P; S=other.S; 
-		return *this;
-	}
-	
-	double surfaceMassDensity(const double r) const{
-		return (Sigma0*pow(r/rc, -P)) * exp(-(pow(r/rc, 2-P)));
-	}
-	
-	double scaleHeight(const double r) const{
-		return (h0*pow(r/r0,S));
-	}
-	
-	double operator()(double r, double theta, double phi) const{
-		double r_cyl=r*sin(theta);
-		double z=r*cos(theta);
-		double h=scaleHeight(r_cyl);
-		
-		return((surfaceMassDensity(r_cyl)/(sqrt(2*pi)*h)) * exp(-z*z/(2*h*h)));
-	}
-};
-
 //base opacity class.
 //users can define their own, though it's much harder than for temperatures or 
 //densities, since this requires two overloaded call operators, one of which 
@@ -249,6 +214,9 @@ struct opacity_base{
 	virtual Vec4d operator()(double temperature, Vec4d frequency, double vTurb, bool freezeout) const{
 		return 0;
 	}
+	virtual double disassociationFactor(double colDensAbove) const{
+		return 1;
+	}
 };
 
 
@@ -260,7 +228,7 @@ struct opacity_base{
 //This is a functor so that I can do as much of the calculation ahead of time as possible
 //The calculation of the partition function is based on a Taylor expansion. For details,
 //see Mangum and Shirley 2015.
-struct COopacFast:public opacity_base {
+struct COopac:public opacity_base {
 	double COFraction, dipoleMoment, COmass,B;
 	double densityRatio; //ratio of chosen isotopologue to 12CO
 	int lowerEnergyLevel;
@@ -270,7 +238,7 @@ struct COopacFast:public opacity_base {
 	enum isotopologue_type { iso_12CO, iso_13CO, iso_C17O, iso_C18O };
 	isotopologue_type isot;
 		
-	COopacFast(int lowerEnergyLevel, isotopologue_type isot) : lowerEnergyLevel(lowerEnergyLevel){
+	COopac(int lowerEnergyLevel, isotopologue_type isot) : lowerEnergyLevel(lowerEnergyLevel){
 		setTransitionTemps(isot);
 		COFraction = 1e-5; //ratio of 12CO to H2
 		COFraction *= 14; //convert from density ratio to number ratio
@@ -278,7 +246,7 @@ struct COopacFast:public opacity_base {
 		B=5.763596e+10; //Hz. The rigid rotor rotation constant for CO
 	}
 	
-	COopacFast(){
+	COopac(){
 		setTransitionTemps(iso_12CO);
 		lowerEnergyLevel = 0;
 		COFraction = 1e-5; //density ratio of CO to H2
@@ -400,6 +368,20 @@ struct COopacFast:public opacity_base {
 			COmass=30*amu;
 			break;	
 		}
+	}
+	
+	//Disassociation of CO, following C. Qi et al 2011, and Rosenfeld 2013.
+	//It gets smoothly decreased over an order of magnitude around 10^21
+	double disassociationFactor(double colDensAbove) const{
+		double factor;
+		if(colDensAbove <= 5e20){
+			factor=0;
+		}else if(colDensAbove <= 1.5e21){
+			factor=(colDensAbove-5e20)/(1e21);
+		}else{
+			factor=1;
+		}
+		return factor;
 	}
 };
 
