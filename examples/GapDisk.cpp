@@ -63,10 +63,10 @@ int main(int argc, char* argv[]){
 	ThreadPool pool(nThreadsMax);
 	astroParams diskData(246.6,-24.72,3.18e18*100,pi/4,pi/4);
 	std::shared_ptr<gapDisk> dptr=std::make_shared<gapDisk>(1,100*AU,5*AU,0.5,1.25,25*AU,50*AU,0.8,0.9,5*AU,10*AU);
-	std::ifstream gridfile("../amr_grid.inp");
-	std::ifstream datafile("../dust_temperature_phi0.ascii");
+	std::ifstream gridfile("data/amr_grid.inp");
+	std::ifstream datafile("data/dust_temperature_phi0.ascii");
 	std::shared_ptr<advancedTemp> tptr=std::make_shared<advancedTemp>(gridfile,datafile);
-	std::shared_ptr<dustOpacity> doptr=std::make_shared<dustOpacity>("../dustopac.txt");
+	std::shared_ptr<dustOpacity> doptr=std::make_shared<dustOpacity>("data/dustopac.txt");
 	
 	grid g(0.1*AU,150*AU,75*pi/180,105*pi/180, 2.18*mSun, dptr, tptr, doptr);
 	image img(500, 500,250*AU, 250*AU, {2.30538e11}, diskData);
