@@ -147,6 +147,8 @@ PREFIX=$PREFIX
 CXXFLAGS+= -fPIC -O3 -std=c++17 -U__STRICT_ANSI__
 LDFLAGS+= ${CFITSIO_CFLAGS} -lcfitsio ${FFTW_CFLAGS} -lfftw3
 INCFLAGS+= ${CFITSIO_CFLAGS} ${FFTW_CFLAGS} ${VCL_CFLAGS}
+EXAMPLES := examples/PowerLawDisk \
+	examples/GapDisk
 " > ./Makefile
 
 echo '
@@ -159,6 +161,8 @@ clean :
 	rm -rf build/image.o
 	rm -rf build/diskPhysics.o
 	rm -rf lib/libmagrathea$(DYN_SUFFIX)
+	rm -rf examples/PowerLawDisk
+	rm -rf examples/GapDisk
 	
 lib/libmagrathea$(DYN_SUFFIX) : build/magrathea.o build/geometry.o build/diskPhysics.o
 	$(CXX) $(LDFLAGS) $(INCFLAGS) -fPIC $(DYN_OPT) -o lib/libmagrathea$(DYN_SUFFIX) $^
@@ -175,4 +179,12 @@ build/diskPhysics.o : src/diskPhysics.cpp include/magrathea/diskPhysics.h
 install :
 	cp lib/libmagrathea$(DYN_SUFFIX) $(PREFIX)lib/
 	cp -r include/magrathea $(PREFIX)include/
+	
+examples : $(EXAMPLES)
+
+examples/PowerLawDisk : examples/PowerLawDisk.cpp
+	$(CXX) $(CXXFLAGS) -lmagrathea examples/PowerLawDisk.cpp -o examples/PowerLawDisk
+examples/GapDisk : examples/GapDisk.cpp
+	$(CXX) $(CXXFLAGS) -lmagrathea examples/GapDisk.cpp -o examples/GapDisk
+
 ' >> ./Makefile
