@@ -183,9 +183,9 @@ install :
 examples : $(EXAMPLES)
 
 examples/PowerLawDisk : examples/PowerLawDisk.cpp
-	$(CXX) $(CXXFLAGS) -lmagrathea examples/PowerLawDisk.cpp -o examples/PowerLawDisk
+	$(CXX) $(CXXFLAGS) -Iinclude -Llib $(INCFLAGS) -lmagrathea $(LDFLAGS) examples/PowerLawDisk.cpp  -o examples/PowerLawDisk
 examples/GapDisk : examples/GapDisk.cpp
-	$(CXX) $(CXXFLAGS) -lmagrathea examples/GapDisk.cpp -o examples/GapDisk
+	$(CXX) $(CXXFLAGS) -Iinclude -Llib $(INCFLAGS) -lmagrathea $(LDFLAGS) examples/GapDisk.cpp -o examples/GapDisk
 	
 uninstall : 
 	rm -rf $(PREFIX)lib/libmagrathea$(DYN_SUFFIX)
