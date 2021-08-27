@@ -524,16 +524,17 @@ public:
 			bool isShrunk=false;
 			
 			//double numScaleHeights; 
+			double scaleHeightLimit=2.5; //how many scale heights above/below the midplane we increase the stepsize for
 			double numScaleHeights=(pos).z/dustDens->scaleHeight((pos).r()*sin((pos).theta()));
 			while (remainingDist >= stepsize/2) {
 				double numScaleHeightsNext=(pos+dir*stepsize).z/dustDens->scaleHeight((pos+dir*stepsize).r()*sin((pos+dir*stepsize).theta()));
-				if(!isShrunk && ((numScaleHeightsNext > -2.5 && numScaleHeights < -2.5) || (numScaleHeightsNext < 2.5 && numScaleHeights > 2.5))){
+				if(!isShrunk && ((numScaleHeightsNext > -scaleHeightLimit && numScaleHeights < -scaleHeightLimit) || (numScaleHeightsNext < scaleHeightLimit && numScaleHeights > scaleHeightLimit))){
 					//std::cout << "shrinking step size" << std::endl;
 					isShrunk=true;
 					stepsize /= contractionFactor;
 					numScaleHeightsNext=(pos+dir*stepsize).z/dustDens->scaleHeight((pos+dir*stepsize).r()*sin((pos+dir*stepsize).theta()));
 				}
-				if(isShrunk && ((numScaleHeightsNext > 2.5 && numScaleHeights < 2.5) || (numScaleHeightsNext < -2.5 && numScaleHeights > -2.5))){
+				if(isShrunk && ((numScaleHeightsNext > scaleHeightLimit && numScaleHeights < scaleHeightLimit) || (numScaleHeightsNext < -scaleHeightLimit && numScaleHeights > -scaleHeightLimit))){
 					//std::cout << "expanding step size" << std::endl;
 					isShrunk=false;
 					stepsize *= contractionFactor;
@@ -678,7 +679,7 @@ public:
 			bool isShrunk=false;
 			
 			//double numScaleHeights; 
-			double scaleHeightLimit=2; //how many scale heights above/below the midplane we increase the stepsize for
+			double scaleHeightLimit=2.5; //how many scale heights above/below the midplane we increase the stepsize for
 			double numScaleHeights=(pos).z/dustDens->scaleHeight((pos).r()*sin((pos).theta()));
 			while (remainingDist >= stepsize/2) {
 				double numScaleHeightsNext=(pos+dir*stepsize).z/dustDens->scaleHeight((pos+dir*stepsize).r()*sin((pos+dir*stepsize).theta()));
