@@ -18,6 +18,7 @@
 #include <fstream>
 #include <iterator>
 #include <limits>
+#include <memory>
 #include <set>
 #include <string>
 #include <sstream>
@@ -89,7 +90,14 @@ public:
 	interpSurface(std::istream& gridFile, std::istream& dataFile){
 		unsigned int rtotal, ttotal, ptotal;
 		std::string line;
-		//std::ifstream infile(gridFile.c_str());
+		if(!gridFile){
+			std::cout << "Could not open grid file " << std::endl;
+			exit(1);
+		}
+		if(!dataFile){
+			std::cout << "Could not open data file " << std::endl;
+			exit(1);
+		}
 		std::stringstream stream;
 		int linenum=0;
 	
