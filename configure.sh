@@ -148,7 +148,8 @@ CXXFLAGS+= -fPIC -O3 -mavx -std=c++17 -U__STRICT_ANSI__
 LDFLAGS+= ${CFITSIO_CFLAGS} -lcfitsio ${FFTW_CFLAGS} -lfftw3
 INCFLAGS+= ${CFITSIO_CFLAGS} ${FFTW_CFLAGS} ${VCL_CFLAGS}
 EXAMPLES := examples/PowerLawDisk \
-	examples/GapDisk
+	examples/GapDisk \
+	examples/PowerLawDiskCO
 " > ./Makefile
 
 echo '
@@ -163,6 +164,7 @@ clean :
 	rm -rf lib/libmagrathea$(DYN_SUFFIX)
 	rm -rf examples/PowerLawDisk
 	rm -rf examples/GapDisk
+	rm -rf examples/PowerLawDiskCO
 	
 lib/libmagrathea$(DYN_SUFFIX) : build/magrathea.o build/geometry.o build/diskPhysics.o
 	$(CXX) $(LDFLAGS) $(INCFLAGS) -fPIC $(DYN_OPT) -o lib/libmagrathea$(DYN_SUFFIX) $^
@@ -186,6 +188,8 @@ examples/PowerLawDisk : examples/PowerLawDisk.cpp
 	$(CXX) $(CXXFLAGS) -Iinclude -Llib $(INCFLAGS) -lmagrathea $(LDFLAGS) examples/PowerLawDisk.cpp  -o examples/PowerLawDisk
 examples/GapDisk : examples/GapDisk.cpp
 	$(CXX) $(CXXFLAGS) -Iinclude -Llib $(INCFLAGS) -lmagrathea $(LDFLAGS) examples/GapDisk.cpp -o examples/GapDisk
+examples/PowerLawDiskCO : examples/PowerLawDiskCO.cpp
+	$(CXX) $(CXXFLAGS) -Iinclude -Llib $(INCFLAGS) -lmagrathea $(LDFLAGS) examples/PowerLawDiskCO.cpp -o examples/PowerLawDiskCO
 	
 uninstall : 
 	rm -rf $(PREFIX)lib/libmagrathea$(DYN_SUFFIX)
