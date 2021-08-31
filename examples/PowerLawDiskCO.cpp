@@ -38,9 +38,8 @@ int main(int argc, char* argv[]){
 	for(int i=0;i<nfreqs;i++){
 		double freq=2.30538e11+freqStep*i-freqRange/2.0;
 		frequencies.push_back(freq);
-		std::cout << freq << std::endl;
 	}
-	image img(1000, 1000,250*AU, 250*AU, frequencies, diskData);
+	image img(2000, 2000,250*AU, 250*AU, frequencies, diskData);
 	vect offset(0,0,0);
 	
 	img.propagate(g, grid::normal, offset, pool, true, 100, 5);

@@ -161,6 +161,7 @@ clean :
 	rm -rf build/geometry.o
 	rm -rf build/image.o
 	rm -rf build/diskPhysics.o
+	rm -rf build/magrathea.o
 	rm -rf lib/libmagrathea$(DYN_SUFFIX)
 	rm -rf examples/PowerLawDisk
 	rm -rf examples/GapDisk
