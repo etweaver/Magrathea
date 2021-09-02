@@ -224,8 +224,7 @@ struct opacity_base{
 //used for velocity calculation. See Bertin&Lodato eq 4 for details of the integral
 //double integrand(double rprime, void* p);
 
-//Opacity of C12O16. See Isella et al 2007
-//This is a functor so that I can do as much of the calculation ahead of time as possible
+//Opacity of CO. See Isella et al 2007
 //The calculation of the partition function is based on a Taylor expansion. For details,
 //see Mangum and Shirley 2015.
 struct COopac:public opacity_base {

@@ -144,7 +144,7 @@ LD=$LD
 DYN_SUFFIX=$DYN_SUFFIX
 DYN_OPT=$DYN_OPT
 PREFIX=$PREFIX
-CXXFLAGS+= -fPIC -O3 -mavx -std=c++17 -U__STRICT_ANSI__
+CXXFLAGS+= -fPIC -O3 -mavx -mfma -std=c++17
 LDFLAGS+= ${CFITSIO_CFLAGS} -lcfitsio ${FFTW_CFLAGS} -lfftw3
 INCFLAGS+= ${CFITSIO_CFLAGS} ${FFTW_CFLAGS} ${VCL_CFLAGS}
 EXAMPLES := examples/PowerLawDisk \
@@ -170,7 +170,7 @@ clean :
 lib/libmagrathea$(DYN_SUFFIX) : build/magrathea.o build/geometry.o build/diskPhysics.o
 	$(CXX) $(LDFLAGS) $(INCFLAGS) -fPIC $(DYN_OPT) -o lib/libmagrathea$(DYN_SUFFIX) $^
 	
-build/magrathea.o : src/magrathea.cpp include/magrathea/magrathea.h include/magrathea/grid.h include/magrathea/diskPhysics.h
+build/magrathea.o : src/magrathea.cpp include/magrathea/magrathea.h include/magrathea/grid.h include/magrathea/diskPhysics.h include/magrathea/diskStructures.h
 	$(CXX) $(CXXFLAGS) $(INCFLAGS) src/magrathea.cpp -c -o build/magrathea.o
 build/geometry.o : src/geometry.cpp include/magrathea/diskPhysics.h include/magrathea/geometry.h
 	$(CXX) $(CXXFLAGS) $(INCFLAGS) src/geometry.cpp -c -o build/geometry.o

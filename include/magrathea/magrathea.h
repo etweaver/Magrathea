@@ -5,4 +5,5 @@
 #include "geometry.h"
 #include "grid.h"
 #include "image.h"
+#include "diskStructures.h"
 

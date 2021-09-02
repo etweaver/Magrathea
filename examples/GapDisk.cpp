@@ -1,19 +1,6 @@
 //PowerLawDisk.cpp
 //Basic disk modeling example, described in section 2.2.1
 #include "magrathea/magrathea.h"
-
-struct advancedTemp:public temperature_base{
-	interpSurface tempSurf;
-	advancedTemp():tempSurf(){}
-	advancedTemp(const advancedTemp& other):tempSurf(other.tempSurf){}
-	
-	advancedTemp(std::ifstream& gridFile, std::ifstream& dataFile):tempSurf(gridFile, dataFile) {}
-	
-	double operator()(double r, double theta, double phi) const{
-		return(tempSurf.interp2d(r,theta));
-	}
-};
-
 struct gapDisk: public density_base {
 	double Sigma0;
 	double rc;
@@ -65,7 +52,7 @@ int main(int argc, char* argv[]){
 	std::shared_ptr<gapDisk> dptr=std::make_shared<gapDisk>(1,100*AU,5*AU,0.5,1.25,25*AU,50*AU,0.8,0.9,5*AU,10*AU);
 	std::ifstream gridfile("data/amr_grid.inp");
 	std::ifstream datafile("data/dust_temperature_phi0.ascii");
-	std::shared_ptr<advancedTemp> tptr=std::make_shared<advancedTemp>(gridfile,datafile);
+	std::shared_ptr<fileTemp> tptr=std::make_shared<fileTemp>(gridfile,datafile);
 	std::shared_ptr<dustOpacity> doptr=std::make_shared<dustOpacity>("data/dustopac.txt");
 	
 	grid g(0.1*AU,150*AU,75*pi/180,105*pi/180, 2.18*mSun, dptr, tptr, doptr);
