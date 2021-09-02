@@ -50,7 +50,7 @@ public:
 	
 	//the usual constructors/destructors
 	image():vpix(0), hpix(0), width(0), height(0), position(), target(), astroData(), frequencies(), data() {}
-	image(unsigned int vpix, unsigned int hpix,double w, double h, std::vector<double> frequencies, astroParams& astroData):
+	image(unsigned int vpix, unsigned int hpix,double w, double h, std::vector<double> frequencies, astroParams astroData):
 		vpix(vpix),hpix(hpix),width(w),height(h), astroData(astroData), frequencies(frequencies), data({frequencies.size(),hpix,vpix}){
 			target=origin; //in six years I've never yet failed to put the disk at the origin, so it's now the default
 			//to position the image, we move put it at the correct angle based on the inclination,
@@ -594,26 +594,26 @@ public:
 	unsigned int vpix, hpix; //vertical and horizontal pixel numbers
 	double width, height; //uv coordinates - units of wavelength
 	std::vector<double> frequencies;
-	double distance;
+	astroParams astroData;
 	
 	marray<double,3> realPart;
 	marray<double,3> imaginaryPart;
 	
-	fourierImage():vpix(0), hpix(0), width(0), height(0), distance(0), frequencies(), realPart(), imaginaryPart() {}
+	fourierImage():vpix(0), hpix(0), width(0), height(0), astroData(), frequencies(), realPart(), imaginaryPart() {}
 	
-	fourierImage(unsigned int vpix, unsigned int hpix,double w, double h, std::vector<double> frequencies, double distance):
-		vpix(vpix),hpix(hpix),width(w),height(h), distance(distance), frequencies(frequencies), realPart({frequencies.size(),hpix,vpix}), imaginaryPart({frequencies.size(),hpix,vpix}){
-			xpixsize=(atan(width/distance)/hpix);
-			ypixsize=(atan(height/distance)/vpix);
+	fourierImage(unsigned int vpix, unsigned int hpix,double w, double h, std::vector<double> frequencies, astroParams astroData):
+		vpix(vpix),hpix(hpix),width(w),height(h), astroData(astroData), frequencies(frequencies), realPart({frequencies.size(),hpix,vpix}), imaginaryPart({frequencies.size(),hpix,vpix}){
+			xpixsize=(atan(width/astroData.dist)/hpix);
+			ypixsize=(atan(height/astroData.dist)/vpix);
 		}
 	
 	fourierImage(const fourierImage& other):
-		vpix(other.vpix),hpix(other.hpix), width(other.width),height(other.height), distance(other.distance), 
+		vpix(other.vpix),hpix(other.hpix), width(other.width),height(other.height), astroData(other.astroData), 
 		xpixsize(other.xpixsize), ypixsize(other.ypixsize), frequencies(other.frequencies), realPart(other.realPart), imaginaryPart(other.imaginaryPart){}
 		
 	fourierImage& operator=(const fourierImage& other){
 		width=other.width; height=other.height;
-		distance=other.distance;
+		astroData=other.astroData;
 		xpixsize=other.xpixsize;
 		ypixsize=other.ypixsize;
 		frequencies=other.frequencies;
@@ -764,8 +764,8 @@ public:
 		double frequency=frequencies[freqIndex];
 		
 		//double kilolambda=c/frequency*10; //we also convert to mks here, hence the *10, not *1000
-		double pixSizex=(atan(width/distance)/hpix);
-		double pixSizey=(atan(height/distance)/vpix);
+		double pixSizex=(atan(width/astroData.dist)/hpix);
+		double pixSizey=(atan(height/astroData.dist)/vpix);
 		
 		//output from FFTW ranges from -0.5 to 0.5, in units of freq/npix
 		//convert u and v into x and y coordinates
@@ -918,11 +918,11 @@ public:
 
 //the image class represents the sky, and so is entirely real. So to do a backtransform for something that is complex,
 //the input data needs to be either a fourier class, or a pair of images.
-fourierImage backTransform(const fourierImage& im){
+image backTransform(const fourierImage& im){
 	unsigned int hpix=im.hpix;
 	unsigned int vpix=im.vpix;
 	
-	fourierImage results(vpix,hpix,im.width,im.height, im.frequencies, im.distance);
+	image results(vpix, hpix, im.width, im.height, im.frequencies, im.astroData);
 	//std::cout << im.centfreq << "\t" << im.freqrange << "\t" << im.frequencies.size() << "\t" << hpix << "\t" << vpix << std::endl;
 	
 	fftw_complex *out1;
@@ -961,8 +961,8 @@ fourierImage backTransform(const fourierImage& im){
 			//std::cout << std::endl;
 		}
 		//now to put the FFT data into the final images
-		std::copy(FFTdataREAL.get(),FFTdataREAL.get()+length,results.realPart.begin()+start);
-		std::copy(FFTdataCMPLX.get(),FFTdataCMPLX.get()+length,results.imaginaryPart.begin()+start);
+		std::copy(FFTdataREAL.get(),FFTdataREAL.get()+length,results.data.begin()+start);
+		//std::copy(FFTdataCMPLX.get(),FFTdataCMPLX.get()+length,results.data.begin()+start);
 		
 	}
 	fftw_free(out1);
@@ -986,7 +986,7 @@ fourierImage backTransform(const image& realInput, const image& imaginaryInput){
 	unsigned int hpix=realInput.hpix;
 	unsigned int vpix=realInput.vpix;
 	
-	fourierImage results(vpix,hpix,realInput.width,realInput.height, realInput.frequencies, realInput.astroData.dist);
+	fourierImage results(vpix,hpix,realInput.width,realInput.height, realInput.frequencies, realInput.astroData);
 	//std::cout << im.centfreq << "\t" << im.freqrange << "\t" << im.frequencies.size() << "\t" << hpix << "\t" << vpix << std::endl;
 	
 	fftw_complex *out1;
@@ -1034,14 +1034,14 @@ fourierImage backTransform(const image& realInput, const image& imaginaryInput){
 	return results;
 }
 
-fourierImage FFTDifferent(const image& im){
+fourierImage FFT(const image& im){
 	image RealPart=im;	
 	image ImaginaryPart=im;	//initialize both of these to the starting image to get most of the parameters right
 	//we'll overwrite the data, and need to change the axes/units later
 
 	unsigned int hpix=im.hpix;
 	unsigned int vpix=im.vpix;
-	fourierImage results(vpix,hpix,im.width,im.height, im.frequencies, im.astroData.dist);
+	fourierImage results(vpix,hpix,im.width,im.height, im.frequencies, im.astroData);
 	
 	for(int f=0;f<results.frequencies.size();f++){
 		unsigned int start=f*hpix*vpix;
@@ -1084,7 +1084,7 @@ fourierImage FFTmultiThread(const image& im, ThreadPool& pool){
 	const unsigned int hpix=im.hpix;
 	const unsigned int vpix=im.vpix;
 	const unsigned int length = hpix*vpix; //number of pixels in each image
-	fourierImage results(vpix,hpix,im.width,im.height, im.frequencies, im.astroData.dist);
+	fourierImage results(vpix,hpix,im.width,im.height, im.frequencies, im.astroData);
 	std::vector<std::future<void> > slices;
 
 	std::vector<fftw_complex*> inputs(results.frequencies.size()), outputs(results.frequencies.size());
