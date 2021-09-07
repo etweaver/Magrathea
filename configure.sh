@@ -149,7 +149,8 @@ LDFLAGS+= ${CFITSIO_CFLAGS} -lcfitsio ${FFTW_CFLAGS} -lfftw3
 INCFLAGS+= ${CFITSIO_CFLAGS} ${FFTW_CFLAGS} ${VCL_CFLAGS}
 EXAMPLES := examples/PowerLawDisk \
 	examples/GapDisk \
-	examples/PowerLawDiskCO
+	examples/PowerLawDiskCO\
+	examples/Fourier
 " > ./Makefile
 
 echo '
@@ -166,11 +167,12 @@ clean :
 	rm -rf examples/PowerLawDisk
 	rm -rf examples/GapDisk
 	rm -rf examples/PowerLawDiskCO
+	rm -rf examples/Fourier
 	
 lib/libmagrathea$(DYN_SUFFIX) : build/magrathea.o build/geometry.o build/diskPhysics.o
 	$(CXX) $(LDFLAGS) $(INCFLAGS) -fPIC $(DYN_OPT) -o lib/libmagrathea$(DYN_SUFFIX) $^
 	
-build/magrathea.o : src/magrathea.cpp include/magrathea/magrathea.h include/magrathea/grid.h include/magrathea/diskPhysics.h include/magrathea/diskStructures.h
+build/magrathea.o : src/magrathea.cpp include/magrathea/magrathea.h include/magrathea/grid.h include/magrathea/diskPhysics.h include/magrathea/diskStructures.h include/magrathea/image.h
 	$(CXX) $(CXXFLAGS) $(INCFLAGS) src/magrathea.cpp -c -o build/magrathea.o
 build/geometry.o : src/geometry.cpp include/magrathea/diskPhysics.h include/magrathea/geometry.h
 	$(CXX) $(CXXFLAGS) $(INCFLAGS) src/geometry.cpp -c -o build/geometry.o
@@ -191,6 +193,8 @@ examples/GapDisk : examples/GapDisk.cpp
 	$(CXX) $(CXXFLAGS) -Iinclude -Llib $(INCFLAGS) -lmagrathea $(LDFLAGS) examples/GapDisk.cpp -o examples/GapDisk
 examples/PowerLawDiskCO : examples/PowerLawDiskCO.cpp
 	$(CXX) $(CXXFLAGS) -Iinclude -Llib $(INCFLAGS) -lmagrathea $(LDFLAGS) examples/PowerLawDiskCO.cpp -o examples/PowerLawDiskCO
+examples/Fourier : examples/Fourier.cpp
+	$(CXX) $(CXXFLAGS) -Iinclude -Llib $(INCFLAGS) -lmagrathea $(LDFLAGS) examples/Fourier.cpp -o examples/Fourier
 	
 uninstall : 
 	rm -rf $(PREFIX)lib/libmagrathea$(DYN_SUFFIX)
