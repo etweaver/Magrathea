@@ -293,7 +293,9 @@ public:
 		fits_write_key(fptr , TDOUBLE , "RA", &astroData.RA, "Right Ascention, J2000", &status);
 		fits_write_key(fptr , TDOUBLE , "DEC", &astroData.Dec, "Declination, J2000", &status);
 		
-		//temporary: gotta flip the actual data around the vertical
+		//The fits standard and I disagree about where the origin is.
+		//Which means that if you just print the way I define the axes, the fits file will
+		//be upside down, so we have to flip everything.
 		//indeces are data[f][y][x]
 		marray<double,3> tempData=data;
 		for(int f=0;f<data.extent(0);f++){
@@ -304,7 +306,6 @@ public:
 			}
 		}
 		
-		//TODO: set back to TDOUBLE when done with CASA
 		if (fits_write_pix(fptr, TDOUBLE, fpixel, nelements, &tempData.front(), &status))  
 			fitserror( status );
 		if (fits_close_file(fptr, &status))  
@@ -624,6 +625,7 @@ public:
 	
 	//write out both the real and imaginary parts to fits files
 	void printToFits(std::string outFileName){
+		std::cout << "printing" << std::endl;
 		fitsfile* fptr;
 		int status = 0;	//ye olde C style error code
 		long naxis = 4;
@@ -693,7 +695,20 @@ public:
 		fits_write_key(fptr , TINT , "CRPIX4", &temp3, "references pixel", &status);
 		fits_write_key(fptr , TDOUBLE , "CROTA4", &temp2, "rotation angle", &status);
 		
-		if (fits_write_pix(fptr, TDOUBLE, fpixel, nelements, &realPart.front(), &status))  
+		//The fits standard and I disagree about where the origin is.
+		//Which means that if you just print the way I define the axes, the fits file will
+		//be upside down, so we have to flip everything.
+		//indeces are data[f][y][x]
+		marray<double,3> tempData=realPart;
+		for(int f=0;f<realPart.extent(0);f++){
+			for(int i=1;i<vpix;i++){
+				for(int j=0;j<hpix;j++){
+					tempData[f][i][j]=realPart[f][vpix-i][j];
+				}
+			}
+		}
+		
+		if (fits_write_pix(fptr, TDOUBLE, fpixel, nelements, &tempData.front(), &status))  
 			fitserror( status );
 		if (fits_close_file(fptr, &status))  
 			fitserror( status );
@@ -729,7 +744,16 @@ public:
 		fits_write_key(fptr , TINT , "CRPIX4", &temp3, "references pixel", &status);
 		fits_write_key(fptr , TDOUBLE , "CROTA4", &temp2, "rotation angle", &status);
 		
-		if (fits_write_pix(fptr, TDOUBLE, fpixel, nelements, &imaginaryPart.front(), &status))  
+		tempData=imaginaryPart;
+		for(int f=0;f<imaginaryPart.extent(0);f++){
+			for(int i=1;i<vpix;i++){
+				for(int j=0;j<hpix;j++){
+					tempData[f][i][j]=imaginaryPart[f][vpix-i][j];
+				}
+			}
+		}
+		
+		if (fits_write_pix(fptr, TDOUBLE, fpixel, nelements, &tempData.front(), &status))  
 			fitserror( status );
 		if (fits_close_file(fptr, &status))  
 			fitserror( status );
@@ -925,22 +949,19 @@ image backTransform(const fourierImage& im){
 	image results(vpix, hpix, im.width, im.height, im.frequencies, im.astroData);
 	//std::cout << im.centfreq << "\t" << im.freqrange << "\t" << im.frequencies.size() << "\t" << hpix << "\t" << vpix << std::endl;
 	
-	fftw_complex *out1;
-	fftw_plan p1;
-	//note about out1: It should probably be an std::unique_ptr, like the following things, but because the fftw_complex is itself
-	//a c style array of length 2, things get... ugly. There may be a way to do this properly, but it's going to be a mess.
-	unsigned int out1size=vpix * hpix;
-	out1 = (fftw_complex*) fftw_malloc(sizeof(fftw_complex) * out1size);
-	
-	const unsigned int dataSize=hpix*vpix*results.frequencies.size();
-	std::unique_ptr<double[]> FFTdataREAL (new double[dataSize]);
-	std::unique_ptr<double[]> FFTdataCMPLX (new double[dataSize]);
-	fftw_complex* inputdata = (fftw_complex*) fftw_malloc(sizeof(fftw_complex) * out1size);
 	//std::cout << "out1size: " << out1size << std::endl;
 	unsigned int length = hpix*vpix; //number of pixels in each image
 	for(int k=0; k<im.frequencies.size();k++){
-		unsigned int start=k*length;
-		int toggle = 1;
+		fftw_complex *out1;
+		fftw_plan p1;
+		//note about out1: It should probably be an std::unique_ptr, like the following things, but because the fftw_complex is itself
+		//a c style array of length 2, things get... ugly. There may be a way to do this properly, but it's going to be a mess.
+		unsigned int out1size=vpix * hpix;
+		out1 = (fftw_complex*) fftw_malloc(sizeof(fftw_complex) * out1size);
+	
+		const unsigned int dataSize=hpix*vpix*results.frequencies.size();
+		fftw_complex* inputdata = (fftw_complex*) fftw_malloc(sizeof(fftw_complex) * out1size);
+		int toggle = -1;
 		
 		for(int i=0; i<hpix;i++,toggle*=-1){
 			for(int j=0; j<vpix;j++,toggle*=-1){
@@ -948,25 +969,21 @@ image backTransform(const fourierImage& im){
 				inputdata[j+i*vpix][1]= im.imaginaryPart[k][i][j]*toggle;
 			}
 		}
-		p1=fftw_plan_dft_2d(hpix, vpix, &inputdata[0], out1,-1, FFTW_ESTIMATE);
+		p1=fftw_plan_dft_2d(hpix, vpix, &inputdata[0], out1,1, FFTW_ESTIMATE);
 		fftw_execute(p1);
 
-		//now we need to extract the data from out1 and put it into the real and complex arrays
-		toggle = 1;
-		for(size_t i=0; i<vpix; i++,toggle*=-1){
-			for(size_t j=0;j<hpix;j++,toggle*=-1){
-				FFTdataREAL[start+j+i*vpix]=out1[j+i*vpix][0]*toggle/hpix/vpix;
-				FFTdataCMPLX[start+j+i*vpix]=out1[j+i*vpix][1]*toggle/hpix/vpix;
+		//now we need to extract the data from out1 and put it into the final image
+		//in this case, we only put the real data.
+		//If this is a back transform, the imaginary part *should* be zero
+		toggle = -1;
+		for(size_t i=0; i<hpix; i++,toggle*=-1){
+			for(size_t j=0;j<vpix;j++,toggle*=-1){
+				results.data[k][i][j]=out1[j+i*vpix][0]*toggle/hpix/vpix;
 			}
-			//std::cout << std::endl;
 		}
-		//now to put the FFT data into the final images
-		std::copy(FFTdataREAL.get(),FFTdataREAL.get()+length,results.data.begin()+start);
-		//std::copy(FFTdataCMPLX.get(),FFTdataCMPLX.get()+length,results.data.begin()+start);
-		
+		fftw_free(out1);
+		fftw_free(inputdata); 
 	}
-	fftw_free(out1);
-	fftw_free(inputdata);
 	return results;
 }
 
@@ -979,10 +996,6 @@ fourierImage backTransform(const image& realInput, const image& imaginaryInput){
 			std::cout << "ERROR: cannot do fourier transform given two images of different size" << std::endl;
 			exit(1);
 		}
-	image RealPart=realInput;	
-	image ImaginaryPart=imaginaryInput;	//initialize both of these to the starting image to get most of the parameters right
-	//we'll overwrite the data, and need to change the axes/units later
-
 	unsigned int hpix=realInput.hpix;
 	unsigned int vpix=realInput.vpix;
 	
@@ -997,14 +1010,11 @@ fourierImage backTransform(const image& realInput, const image& imaginaryInput){
 	out1 = (fftw_complex*) fftw_malloc(sizeof(fftw_complex) * out1size);
 	
 	const unsigned int dataSize=hpix*vpix*results.frequencies.size();
-	std::unique_ptr<double[]> FFTdataREAL (new double[dataSize]);
-	std::unique_ptr<double[]> FFTdataCMPLX (new double[dataSize]);
 	fftw_complex* inputdata = (fftw_complex*) fftw_malloc(sizeof(fftw_complex) * out1size);
 	//std::cout << "out1size: " << out1size << std::endl;
 	unsigned int length = hpix*vpix; //number of pixels in each image
-	for(int k=0; k<results.frequencies.size();k++){
-		unsigned int start=k*length;
-		int toggle = 1;
+	/*for(int k=0; k<results.frequencies.size();k++){
+		int toggle = -1;
 		
 		for(int i=0; i<hpix;i++,toggle*=-1){
 			for(int j=0; j<vpix;j++,toggle*=-1){
@@ -1012,25 +1022,58 @@ fourierImage backTransform(const image& realInput, const image& imaginaryInput){
 				inputdata[j+i*vpix][1]= imaginaryInput.data[k][i][j]*toggle;
 			}
 		}
-		p1=fftw_plan_dft_2d(hpix, vpix, &inputdata[0], out1,-1, FFTW_ESTIMATE);
+		p1=fftw_plan_dft_2d(hpix, vpix, &inputdata[0], out1,1, FFTW_ESTIMATE);
 		fftw_execute(p1);
 
-		//now we need to extract the data from out1 and put it into the real and complex arrays
-		toggle = 1;
-		for(size_t i=0; i<vpix; i++,toggle*=-1){
-			for(size_t j=0;j<hpix;j++,toggle*=-1){
-				FFTdataREAL[start+j+i*vpix]=out1[j+i*vpix][0]*toggle;
-				FFTdataCMPLX[start+j+i*vpix]=out1[j+i*vpix][1]*toggle;
+		//now we need to extract the data from out1 and put it into the final image
+		//in this case, we only put the real data.
+		//Here, since the output is a fourier image, we can incldue the imaginary part
+		//this is mostly useful for debugging
+		toggle = -1;
+		for(size_t i=0; i<hpix; i++,toggle*=-1){
+			for(size_t j=0;j<vpix;j++,toggle*=-1){
+				results.realPart[k][i][j]=out1[j+i*vpix][0]*toggle/hpix/vpix;
+				results.imaginaryPart[k][i][j]=out1[j+i*vpix][1]*toggle/hpix/vpix;
 			}
-			//std::cout << std::endl;
 		}
-		//now to put the FFT data into the final images
-		std::copy(FFTdataREAL.get(),FFTdataREAL.get()+length,results.realPart.begin()+start);
-		std::copy(FFTdataCMPLX.get(),FFTdataCMPLX.get()+length,results.imaginaryPart.begin()+start);
-		
 	}
 	fftw_free(out1);
 	fftw_free(inputdata);
+	*/
+	for(int k=0; k<results.frequencies.size();k++){
+		fftw_complex *out1;
+		fftw_plan p1;
+		//note about out1: It should probably be an std::unique_ptr, like the following things, but because the fftw_complex is itself
+		//a c style array of length 2, things get... ugly. There may be a way to do this properly, but it's going to be a mess.
+		unsigned int out1size=vpix * hpix;
+		out1 = (fftw_complex*) fftw_malloc(sizeof(fftw_complex) * out1size);
+	
+		const unsigned int dataSize=hpix*vpix*results.frequencies.size();
+		fftw_complex* inputdata = (fftw_complex*) fftw_malloc(sizeof(fftw_complex) * out1size);
+		int toggle = -1;
+		
+		for(int i=0; i<hpix;i++,toggle*=-1){
+			for(int j=0; j<vpix;j++,toggle*=-1){
+				inputdata[j+i*vpix][0]= realInput.data[k][i][j]*toggle;
+				inputdata[j+i*vpix][1]= imaginaryInput.data[k][i][j]*toggle;
+			}
+		}
+		p1=fftw_plan_dft_2d(hpix, vpix, &inputdata[0], out1,1, FFTW_ESTIMATE);
+		fftw_execute(p1);
+
+		//now we need to extract the data from out1 and put it into the final image
+		//in this case, we only put the real data.
+		//If this is a back transform, the imaginary part *should* be zero
+		toggle = -1;
+		for(size_t i=0; i<hpix; i++,toggle*=-1){
+			for(size_t j=0;j<vpix;j++,toggle*=-1){
+				results.realPart[k][i][j]=out1[j+i*vpix][0]*toggle/hpix/vpix;
+				results.imaginaryPart[k][i][j]=out1[j+i*vpix][1]*toggle/hpix/vpix;
+			}
+		}
+		fftw_free(out1);
+		fftw_free(inputdata); 
+	}
 	return results;
 }
 
@@ -1177,7 +1220,7 @@ struct beam{
 		double degperpixv = (atan(height/(im.astroData.dist))/vpix)* (180/pi);
 		double majorAxis=bmaj/3600/degperpixh;
 		double minorAxis=bmin/3600/degperpixh;
-		//std::cout << majorAxis << "\t" << minorAxis << std::endl;
+		std::cout << majorAxis << "\t" << minorAxis << std::endl;
 		
 		//now we need to construct the image plane beam and its FFTs
 		for(int i=0;i<hpix;i++){
