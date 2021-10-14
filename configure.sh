@@ -42,6 +42,54 @@ find_package(){
 	eval ${VAR_PREFIX}_LIBDIR=\"`pkg-config --variable=libdir $PKG`\"
 }
 
+ensure_found(){
+	PKG=$1
+	VAR_PREFIX=`echo $PKG | tr [:lower:] [:upper:]`
+	TMP_FOUND=`eval echo "$"${VAR_PREFIX}_FOUND`
+	if [ "$TMP_FOUND" ]; then return; fi
+	#not found
+	lowername=`echo $PKG | tr [A-Z] [a-z]`
+
+	TMP_INCDIR=`eval echo "$"${VAR_PREFIX}_INCDIR`
+	TMP_LIBDIR=`eval echo "$"${VAR_PREFIX}_LIBDIR`
+	if [ "$TMP_INCDIR" -a "$TMP_LIBDIR" ]; then
+		echo "Error: $PKG not found in $TMP_INCDIR and $TMP_LIBDIR or with pkg-config" 1>&2
+		echo "Please verify that the path given to --with-${lowername} is correct" 1>&2
+	else
+		echo "Error: $PKG not installed or not registered with pkg-config" 1>&2
+		echo "Please specify location using the --with-${lowername} flag" 1>&2
+	fi
+	unset TMP_INCDIR
+	unset TMP_LIBDIR
+	exit 1
+}
+
+
+#find_cfitsio(){
+#
+#}
+
+#find vectorclass.h, vectormath_trig.h, and vectormath_exp.h"
+find_vcl(){
+	PKG=vcl
+	VAR_PREFIX=`echo $PKG | tr [:lower:] [:upper:]`
+	TMP_FOUND=`eval echo "$"${VAR_PREFIX}_FOUND`
+	if [ "$TMP_FOUND" ]; then return; fi
+	echo "Looking for $PKG..."
+	POSSIBLE_VCL_INCDIRS="/usr/include /usr/local/include /usr/include/vcl /usr/local/include/vcl"
+	for VCL_INCDIR in $POSSIBLE_VCL_INCDIRS; do
+		if [ -d "$VCL_INCDIR" \
+			-a -e "$VCL_INCDIR/vectorclass.h" ]; then
+			VCL_FOUND=1
+			VCL_LIBDIR="NotActuallyUsed"
+			VCL_CFLAGS="-I${VCL_INCDIR}"
+			echo " Found VCL headers at $VCL_INCDIR"
+			return
+		fi;
+	done
+	
+}
+
 GUESS_CC=gcc
 GUESS_CXX=g++
 GUESS_AR=ar
@@ -64,7 +112,6 @@ AR=${AR-$GUESS_AR}
 LD=${LD-$GUESS_LD}
 
 find_package fftw3
-#find_package libcfitsio
 
 HELP="Usage: ./config.sh [OPTION]... 
 Installation directories:
@@ -106,7 +153,7 @@ do
 	
 	TMP=`echo "$arg" | sed -n 's/^--with-vcl=\(.*\)$/\1/p'`
 	if [ "$TMP" ]; then
-		VCL_INCDIR="${TMP}/vcl";
+		VCL_INCDIR="${TMP}";
 	continue; fi
 		
 	echo "config.sh: Unknown or malformed option '$arg'" 1>&2
@@ -124,8 +171,15 @@ if [ "$FFTW_INCDIR" -a "$FFTW_LIBDIR" ]; then
 fi;
 
 if [ "$VCL_INCDIR" ]; then
-	VCL_CFLAGS="-I${VCL_INCDIR}"
+	echo "Checking manually specified VCL directory"
+	if [ -d "$VCL_INCDIR" \
+		-a -e "$VCL_INCDIR/vectorclass.h" ]; then
+		VCL_FOUND=1
+		VCL_CFLAGS="-I${VCL_INCDIR}"
+		echo " Found VCL"
+	fi;
 fi;
+find_vcl
 
 if [ ! -d ./build/ ]; then
     mkdir build;
@@ -134,6 +188,9 @@ fi
 if [ ! -d ./lib/ ]; then
     mkdir lib;
 fi
+
+ensure_found fftw3
+ensure_found vcl
 
 echo "Generating makefile..."
 echo "
