@@ -25,8 +25,8 @@
 #include "fftw3.h"
 #include "marray.h"
 
-#include "vcl/vectorclass.h"
-#include "vcl/vectormath_trig.h"
+#include "vectorclass.h"
+#include "vectormath_trig.h"
 #include "aligned_alloc.h"
 
 //print cfitsio error message and exit

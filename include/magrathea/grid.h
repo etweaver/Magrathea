@@ -25,8 +25,8 @@
 
 #include "diskPhysics.h"
 #include "diskStructures.h"
-#include "vcl/vectorclass.h"
-#include "vcl/vectormath_trig.h"
+#include "vectorclass.h"
+#include "vectormath_trig.h"
 #include "aligned_alloc.h"
 
 

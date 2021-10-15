@@ -65,9 +65,43 @@ ensure_found(){
 }
 
 
-#find_cfitsio(){
-#
-#}
+find_cfitsio(){
+	PKG=cfitsio
+	VAR_PREFIX=`echo $PKG | tr [:lower:] [:upper:]`
+	TMP_FOUND=`eval echo "$"${VAR_PREFIX}_FOUND`
+	if [ "$TMP_FOUND" ]; then return; fi
+	echo "Looking for $PKG..."
+	POSSIBLE_PREFIXES="/usr /usr/local"
+	POSSIBLE_LIBDIRS="/lib /lib64 /lib/x86_64-linux-gnu"
+	for PREFIX in $POSSIBLE_PREFIXES; do
+		for LIBDIR in $POSSIBLE_LIBDIRS; do
+			CFITSIO_LIBDIR="${PREFIX}${LIBDIR}"
+			if [ -d "$CFITSIO_LIBDIR" \
+				-a \( -e "$CFITSIO_LIBDIR/libcfitsio.a" -o -e "$CFITSIO_LIBDIR/libcfitsio.so" \) ]; then
+				CFITSIO_LIB_FOUND=1
+				break
+			fi;
+		done
+		if [ "$CFITSIO_LIB_FOUND" ]; then break; fi
+	done
+	for PREFIX in $POSSIBLE_PREFIXES; do
+		for SUFFIX in "" "/cfitsio"; do 
+			CFITSIO_INCDIR="${PREFIX}/include${SUFFIX}"
+			if [ -d "$CFITSIO_INCDIR" -a -e "$CFITSIO_INCDIR/fitsio.h" ]; then
+				CFITSIO_INC_FOUND=1
+				break
+			fi
+		done
+		if [ "$CFITSIO_INC_FOUND" ]; then break; fi
+	done
+	if [ "$CFITSIO_LIB_FOUND" -a "$CFITSIO_INC_FOUND" ]; then
+		CFITSIO_FOUND=1
+		echo " Found cfitsio headers at $CFITSIO_INCDIR"
+		echo " Found cfitsio libraries at $CFITSIO_LIBDIR"
+		CFITSIO_CFLAGS="-I${CFITSIO_INCDIR}"
+		CFITSIO_LDFLAGS="-L${CFITSIO_LIBDIR} -lcfitsio"
+	fi
+}
 
 #find vectorclass.h, vectormath_trig.h, and vectormath_exp.h"
 find_vcl(){
@@ -81,13 +115,13 @@ find_vcl(){
 		if [ -d "$VCL_INCDIR" \
 			-a -e "$VCL_INCDIR/vectorclass.h" ]; then
 			VCL_FOUND=1
+			#we don't have a libdir for VCL, but ensure_found() expects one
 			VCL_LIBDIR="NotActuallyUsed"
 			VCL_CFLAGS="-I${VCL_INCDIR}"
 			echo " Found VCL headers at $VCL_INCDIR"
 			return
 		fi;
 	done
-	
 }
 
 GUESS_CC=gcc
@@ -161,13 +195,32 @@ do
 done
 
 if [ "$CFITSIO_INCDIR" -a "$CFITSIO_LIBDIR" ]; then
+	echo "Checking manually specified cfitsio directories"
 	CFITSIO_CFLAGS="-I${CFITSIO_INCDIR}"
 	CFITSIO_LDFLAGS="-L${CFITSIO_LIBDIR}"
-fi;
+	if [ -d "$CFITSIO_LIBDIR" \
+		-a \( -e "$CFITSIO_LIBDIR/libcfitsio.a" -o -e "$CFITSIO_LIBDIR/libcfitsio.so" \) \
+		-a -d "$CFITSIO_INCDIR" -a -e "$CFITSIO_INCDIR/fitsio.h" ]; then
+		CFITSIO_FOUND=1
+		CFITSIO_CFLAGS="-I${CFITSIO_INCDIR}"
+		CFITSIO_LDFLAGS="-L${CFITSIO_LIBDIR} -lcfitsio"
+		echo " Found cfitsio"
+	fi
+fi
+find_cfitsio
 
 if [ "$FFTW_INCDIR" -a "$FFTW_LIBDIR" ]; then
-	CFITSIO_CFLAGS="-I${FFTW_INCDIR}"
-	CFITSIO_LDFLAGS="-L${FFTW_LIBDIR}"
+	echo "Checking manually specified fftw3 directories"
+	FFTW3_CFLAGS="-I${FFTW_INCDIR}"
+	FFTW3_LDFLAGS="-L${FFTW_LIBDIR} -lfftw3"
+	if [ -d "$FFTW_LIBDIR" \
+		-a \( -e "$FFTW_LIBDIR/libfftw3.a" -o -e "$FFTW_LIBDIR/libfftw3.so" \) \
+		-a -d "$FFTW_INCDIR" -a -e "$FFTW_INCDIR/fftw3.h" ]; then
+		FFTW3_FOUND=1
+		FFTW3_CFLAGS="-I${FFTW_INCDIR}"
+		FFTW3_LDFLAGS="-L${FFTW_LIBDIR} -lfftw3"
+		echo " Found FFTW"
+	fi
 fi;
 
 if [ "$VCL_INCDIR" ]; then
@@ -191,6 +244,7 @@ fi
 
 ensure_found fftw3
 ensure_found vcl
+ensure_found cfitsio
 
 echo "Generating makefile..."
 echo "
@@ -201,9 +255,9 @@ LD=$LD
 DYN_SUFFIX=$DYN_SUFFIX
 DYN_OPT=$DYN_OPT
 PREFIX=$PREFIX
-CXXFLAGS+= -fPIC -O3 -mavx -mfma -std=c++17
-LDFLAGS+= ${CFITSIO_CFLAGS} -lcfitsio ${FFTW_CFLAGS} -lfftw3
-INCFLAGS+= ${CFITSIO_CFLAGS} ${FFTW_CFLAGS} ${VCL_CFLAGS}
+CXXFLAGS+= -fPIC -O3 -mavx -mfma -std=c++17 -pthread
+LDFLAGS+= ${CFITSIO_LDFLAGS} ${FFTW3_LDFLAGS}
+INCFLAGS+= ${CFITSIO_CFLAGS} ${FFTW3_CFLAGS} ${VCL_CFLAGS}
 EXAMPLES := examples/PowerLawDisk \
 	examples/GapDisk \
 	examples/PowerLawDiskCO\
@@ -227,7 +281,7 @@ clean :
 	rm -rf examples/Fourier
 	
 lib/libmagrathea$(DYN_SUFFIX) : build/magrathea.o build/geometry.o build/diskPhysics.o
-	$(CXX) $(LDFLAGS) $(INCFLAGS) -fPIC $(DYN_OPT) -o lib/libmagrathea$(DYN_SUFFIX) $^
+	$(CXX) $(INCFLAGS) -fPIC $(DYN_OPT) -o lib/libmagrathea$(DYN_SUFFIX) $^ $(LDFLAGS)
 	
 build/magrathea.o : src/magrathea.cpp include/magrathea/magrathea.h include/magrathea/grid.h include/magrathea/diskPhysics.h include/magrathea/diskStructures.h include/magrathea/image.h
 	$(CXX) $(CXXFLAGS) $(INCFLAGS) src/magrathea.cpp -c -o build/magrathea.o
@@ -245,13 +299,13 @@ install :
 examples : $(EXAMPLES)
 
 examples/PowerLawDisk : examples/PowerLawDisk.cpp
-	$(CXX) $(CXXFLAGS) -Iinclude -Llib $(INCFLAGS) -lmagrathea $(LDFLAGS) examples/PowerLawDisk.cpp  -o examples/PowerLawDisk
+	$(CXX) $(CXXFLAGS) -Iinclude -Llib $(INCFLAGS) examples/PowerLawDisk.cpp  -o examples/PowerLawDisk -lmagrathea $(LDFLAGS)
 examples/GapDisk : examples/GapDisk.cpp
-	$(CXX) $(CXXFLAGS) -Iinclude -Llib $(INCFLAGS) -lmagrathea $(LDFLAGS) examples/GapDisk.cpp -o examples/GapDisk
+	$(CXX) $(CXXFLAGS) -Iinclude -Llib $(INCFLAGS) examples/GapDisk.cpp -o examples/GapDisk -lmagrathea $(LDFLAGS)
 examples/PowerLawDiskCO : examples/PowerLawDiskCO.cpp
-	$(CXX) $(CXXFLAGS) -Iinclude -Llib $(INCFLAGS) -lmagrathea $(LDFLAGS) examples/PowerLawDiskCO.cpp -o examples/PowerLawDiskCO
+	$(CXX) $(CXXFLAGS) -Iinclude -Llib $(INCFLAGS) examples/PowerLawDiskCO.cpp -o examples/PowerLawDiskCO -lmagrathea $(LDFLAGS)
 examples/Fourier : examples/Fourier.cpp
-	$(CXX) $(CXXFLAGS) -Iinclude -Llib $(INCFLAGS) -lmagrathea $(LDFLAGS) examples/Fourier.cpp -o examples/Fourier
+	$(CXX) $(CXXFLAGS) -Iinclude -Llib $(INCFLAGS) examples/Fourier.cpp -o examples/Fourier -lmagrathea $(LDFLAGS)
 	
 uninstall : 
 	rm -rf $(PREFIX)lib/libmagrathea$(DYN_SUFFIX)

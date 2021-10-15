@@ -7,9 +7,9 @@
 #include <vector>
 #include <algorithm>
 
-#include "vcl/vectorclass.h"
-#include "vcl/vectormath_trig.h"
-#include "vcl/vectormath_exp.h"
+#include "vectorclass.h"
+#include "vectormath_trig.h"
+#include "vectormath_exp.h"
 
 //all physical constants are in cgs
 const double gravConst=6.67259e-8;
