@@ -226,14 +226,13 @@ public:
 };
 
 struct powerLawDisk : public density_base {
-private:
+public:
 	double Sigma0;
 	double rc;
 	double h0;
 	double P;//density index
 	double S;//scale height index
 	
-public:
 	powerLawDisk(): Sigma0(0), rc(0), h0(0), P(0), S(0){ }
 	powerLawDisk(const powerLawDisk& other): Sigma0(other.Sigma0), rc(other.rc), h0(other.h0),
 	P(other.P), S(other.S){  }

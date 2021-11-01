@@ -261,7 +261,8 @@ INCFLAGS+= ${CFITSIO_CFLAGS} ${FFTW3_CFLAGS} ${VCL_CFLAGS}
 EXAMPLES := examples/PowerLawDisk \
 	examples/GapDisk \
 	examples/PowerLawDiskCO\
-	examples/Fourier
+	examples/Fourier \
+	examples/Fit
 " > ./Makefile
 
 echo '
@@ -269,21 +270,17 @@ echo '
 all : lib/libmagrathea$(DYN_SUFFIX)
 
 clean : 
-	rm -rf build/disk.o
-	rm -rf build/geometry.o
-	rm -rf build/image.o
-	rm -rf build/diskPhysics.o
-	rm -rf build/magrathea.o
+	rm -rf build/*.o
 	rm -rf lib/libmagrathea$(DYN_SUFFIX)
 	rm -rf examples/PowerLawDisk
 	rm -rf examples/GapDisk
 	rm -rf examples/PowerLawDiskCO
 	rm -rf examples/Fourier
 	
-lib/libmagrathea$(DYN_SUFFIX) : build/magrathea.o build/geometry.o build/diskPhysics.o
+lib/libmagrathea$(DYN_SUFFIX) : build/magrathea.o build/geometry.o build/diskPhysics.o build/ParameterSet.o
 	$(CXX) $(INCFLAGS) -fPIC $(DYN_OPT) -o lib/libmagrathea$(DYN_SUFFIX) $^ $(LDFLAGS)
 	
-build/magrathea.o : src/magrathea.cpp include/magrathea/magrathea.h include/magrathea/grid.h include/magrathea/diskPhysics.h include/magrathea/diskStructures.h include/magrathea/image.h
+build/magrathea.o : src/magrathea.cpp include/magrathea/magrathea.h include/magrathea/grid.h include/magrathea/diskPhysics.h include/magrathea/diskStructures.h include/magrathea/image.h include/magrathea/mcmc.h include/magrathea/ParameterSet.h
 	$(CXX) $(CXXFLAGS) $(INCFLAGS) src/magrathea.cpp -c -o build/magrathea.o
 build/geometry.o : src/geometry.cpp include/magrathea/diskPhysics.h include/magrathea/geometry.h
 	$(CXX) $(CXXFLAGS) $(INCFLAGS) src/geometry.cpp -c -o build/geometry.o
@@ -291,6 +288,8 @@ build/image.o : src/image.cpp include/magrathea/image.h include/magrathea/diskPh
 	$(CXX) $(CXXFLAGS) $(INCFLAGS) src/image.cpp -c -o build/image.o
 build/diskPhysics.o : src/diskPhysics.cpp include/magrathea/diskPhysics.h
 	$(CXX) $(CXXFLAGS) $(INCFLAGS) src/diskPhysics.cpp -c -o build/diskPhysics.o
+build/ParameterSet.o : src/ParameterSet.cpp include/magrathea/ParameterSet.h 
+	$(CXX) $(CXXFLAGS) $(INCFLAGS) src/ParameterSet.cpp -c -o build/ParameterSet.o
 	
 install :
 	cp lib/libmagrathea$(DYN_SUFFIX) $(PREFIX)lib/
@@ -306,6 +305,8 @@ examples/PowerLawDiskCO : examples/PowerLawDiskCO.cpp
 	$(CXX) $(CXXFLAGS) -Iinclude -Llib $(INCFLAGS) examples/PowerLawDiskCO.cpp -o examples/PowerLawDiskCO -lmagrathea $(LDFLAGS)
 examples/Fourier : examples/Fourier.cpp
 	$(CXX) $(CXXFLAGS) -Iinclude -Llib $(INCFLAGS) examples/Fourier.cpp -o examples/Fourier -lmagrathea $(LDFLAGS)
+examples/Fit : examples/Fit.cpp
+	$(CXX) $(CXXFLAGS) -Iinclude -Llib $(INCFLAGS) examples/Fit.cpp -o examples/Fit -lmagrathea $(LDFLAGS)
 	
 uninstall : 
 	rm -rf $(PREFIX)lib/libmagrathea$(DYN_SUFFIX)
